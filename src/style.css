@@ -1,0 +1,947 @@
+/* Tiny Harbor — sistema visual "cartel de puerto / risografía".
+   Tokens: paleta de tintas limitada, radio único 12px, sombra offset de imprenta. */
+
+:root {
+  --paper: #f2e8d5;
+  --paper-2: #e5d8bd;
+  --paper-3: #d9c9a8;
+  --ink: #233047;
+  --ink-soft: #3b4a63;
+  --coral: #e0684b;
+  --coral-dark: #c4523a;
+  --mustard: #dfa93e;
+  --sea: #2f8290;
+  --sea-deep: #1e5f70;
+  --r: 12px;
+  --shadow: 3px 3px 0 rgba(35, 48, 71, 0.16);
+  --border: 2px solid var(--ink);
+  --font: "Bricolage Grotesque Variable", system-ui, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* El atributo hidden gana SIEMPRE (los .btn tienen display propio). */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--sea-deep);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#game-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+#ui-root {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#ui-root > * {
+  pointer-events: auto;
+}
+
+/* Grano de imprenta sobre todo (fijo, sin repaints en scroll) */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.4;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.14 0 0 0 0 0.19 0 0 0 0 0.28 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------- botones ticket ---------- */
+.btn {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--ink);
+  background: var(--paper);
+  border: var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: transform 0.09s ease, box-shadow 0.09s ease, background 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.btn:active {
+  transform: translate(2px, 2px) scale(0.97);
+  box-shadow: 1px 1px 0 rgba(35, 48, 71, 0.16);
+}
+
+.btn.primary {
+  background: var(--coral);
+  color: var(--paper);
+}
+
+.btn.primary:not(:disabled) {
+  animation: breathe 2.2s ease-in-out infinite;
+}
+
+.btn.gold {
+  background: var(--mustard);
+}
+
+.btn:disabled {
+  background: var(--paper-2);
+  color: rgba(35, 48, 71, 0.45);
+  border-style: dashed;
+  border-color: rgba(35, 48, 71, 0.45);
+  box-shadow: none;
+  cursor: default;
+  animation: none;
+}
+
+.btn .sub {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+/* Los SVG inline nunca dictan layout: tamaño fijo por contexto. */
+.btn > svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.tabbar button .ico svg {
+  width: 26px;
+  height: 26px;
+}
+
+.zone-item .buoy svg {
+  width: 22px;
+  height: 22px;
+}
+
+.btn.icon {
+  border-radius: 50%; /* excepción deliberada: botones-icono redondos */
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  font-size: 19px;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn.primary:not(:disabled) {
+    animation: none;
+  }
+}
+
+/* ---------- barra superior ---------- */
+.topbar {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 10px);
+  left: 12px;
+  right: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  z-index: 20;
+}
+
+.money-card {
+  background: var(--paper);
+  border: var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 8px 16px 7px;
+  min-width: 132px;
+}
+
+.money-card .amount {
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  transition: transform 0.12s ease;
+}
+
+.money-card .amount.bump {
+  transform: scale(1.12);
+}
+
+.money-card .amount::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--mustard);
+  border: 2px solid var(--ink);
+  align-self: center;
+  flex: none;
+}
+
+.money-card .rate {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  margin-top: 3px;
+}
+
+.top-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* sello de reputación */
+.rep-stamp {
+  background: var(--paper);
+  border: 2px solid var(--coral-dark);
+  color: var(--coral-dark);
+  border-radius: var(--r);
+  transform: rotate(3deg);
+  padding: 5px 11px;
+  font-weight: 800;
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  line-height: 1.05;
+  text-align: center;
+}
+
+.rep-stamp small {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- misiones ---------- */
+.missions-btn {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 78px);
+  left: 12px;
+  z-index: 20;
+}
+
+.missions-btn .badge {
+  background: var(--coral);
+  color: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.missions-panel {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 132px);
+  left: 12px;
+  width: min(320px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 21;
+}
+
+.mission-card {
+  background: var(--paper);
+  border: var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 9px 12px;
+}
+
+.mission-card .mtext {
+  font-size: 13.5px;
+  font-weight: 700;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mission-card .reward {
+  color: var(--coral-dark);
+  white-space: nowrap;
+}
+
+.mission-card .bar {
+  margin-top: 6px;
+  height: 8px;
+  border: 1.5px solid var(--ink);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--paper-2);
+}
+
+.mission-card .bar i {
+  display: block;
+  height: 100%;
+  background: var(--sea);
+  transition: width 0.3s ease;
+}
+
+/* ---------- banner de evento ---------- */
+.event-banner {
+  position: absolute;
+  top: calc(env(safe-area-inset-top, 0px) + 78px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(400px, calc(100vw - 24px));
+  background: var(--paper);
+  border: var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 10px 14px;
+  z-index: 25;
+  text-align: center;
+}
+
+.event-banner.storm {
+  border-color: var(--ink);
+  background: #d7dbe4;
+}
+
+.event-banner h3 {
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.event-banner p {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.event-banner .row {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.event-banner .row .btn {
+  flex: 1;
+}
+
+.event-banner .timer {
+  height: 6px;
+  border: 1.5px solid var(--ink);
+  border-radius: 4px;
+  background: var(--paper-2);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.event-banner .timer i {
+  display: block;
+  height: 100%;
+  background: var(--coral);
+}
+
+/* ---------- hoja inferior ---------- */
+.sheet {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, 100vw);
+  background: var(--paper);
+  border: var(--border);
+  border-bottom: none;
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -3px 0 rgba(35, 48, 71, 0.14);
+  z-index: 30;
+  transition: max-height 0.28s cubic-bezier(0.32, 0.72, 0.25, 1);
+  max-height: 64px;
+  overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.sheet.open {
+  max-height: min(58dvh, 460px);
+}
+
+.tabbar {
+  display: flex;
+  height: 62px;
+  border-bottom: 2px dashed rgba(35, 48, 71, 0.25);
+}
+
+.tabbar button {
+  flex: 1;
+  background: none;
+  border: none;
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  position: relative;
+  padding-top: 4px;
+  transition: color 0.15s ease;
+}
+
+.tabbar button .ico {
+  display: block;
+  font-size: 17px;
+  line-height: 1.3;
+}
+
+.tabbar button.active {
+  color: var(--ink);
+}
+
+.tabbar button.active::after {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 7px;
+  height: 4px;
+  border-radius: 3px;
+  background: var(--coral);
+}
+
+.tabbar button .dot {
+  position: absolute;
+  top: 8px;
+  right: 18%;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--coral);
+  border: 1.5px solid var(--ink);
+}
+
+.sheet-content {
+  overflow-y: auto;
+  max-height: calc(min(58dvh, 460px) - 64px);
+  padding: 12px 14px calc(env(safe-area-inset-bottom, 0px) + 16px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.section-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+/* tarjeta de tienda / fila de barco */
+.card {
+  background: #fbf5e8;
+  border: var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card.locked {
+  opacity: 0.75;
+  background: var(--paper-2);
+}
+
+.card .info {
+  flex: 1;
+  min-width: 0;
+}
+
+.card .name {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.card .desc {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 1px;
+}
+
+.card .thumb {
+  width: 52px;
+  height: 38px;
+  flex: none;
+}
+
+.boat-row {
+  background: #fbf5e8;
+  border: var(--border);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
+  padding: 9px 12px;
+}
+
+.boat-row .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.boat-row .status {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sea-deep);
+  white-space: nowrap;
+}
+
+.boat-row .status.ready {
+  color: var(--coral-dark);
+}
+
+.boat-row .ups {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.boat-row .ups .btn {
+  flex: 1;
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+/* mapa de zonas */
+.zone-map {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0;
+  padding: 4px 2px;
+}
+
+.zone-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 4px;
+  position: relative;
+}
+
+.zone-item + .zone-item::after {
+  content: "";
+  position: absolute;
+  left: 21px;
+  bottom: -14px;
+  height: 18px;
+  border-left: 2.5px dashed rgba(35, 48, 71, 0.4);
+}
+
+.zone-item .buoy {
+  width: 42px;
+  height: 42px;
+  flex: none;
+  border-radius: 50%;
+  border: var(--border);
+  background: var(--paper-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.zone-item.unlocked .buoy {
+  background: var(--sea);
+  color: var(--paper);
+}
+
+.zone-item.current .buoy {
+  background: var(--coral);
+  color: var(--paper);
+}
+
+.zone-item .info {
+  flex: 1;
+}
+
+.zone-item .name {
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.zone-item .desc {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* prestigio */
+.prestige-box {
+  text-align: center;
+  padding: 6px 2px;
+}
+
+.prestige-box h3 {
+  font-size: 19px;
+  font-weight: 800;
+}
+
+.prestige-box p {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 4px;
+}
+
+.prestige-box .bar {
+  height: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: var(--paper-2);
+  overflow: hidden;
+  margin: 12px 0;
+}
+
+.prestige-box .bar i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--mustard), var(--coral));
+  transition: width 0.4s ease;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat-grid .stat {
+  background: #fbf5e8;
+  border: var(--border);
+  border-radius: var(--r);
+  padding: 8px 10px;
+}
+
+.stat-grid .stat b {
+  display: block;
+  font-size: 17px;
+}
+
+.stat-grid .stat span {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+/* ---------- modales ---------- */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(24, 32, 48, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+
+.modal {
+  background: var(--paper);
+  border: var(--border);
+  border-radius: 16px;
+  box-shadow: 5px 5px 0 rgba(20, 27, 40, 0.35);
+  width: min(380px, 100%);
+  padding: 20px 18px;
+  text-align: center;
+  animation: pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.82);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .modal {
+    animation: none;
+  }
+  .sheet {
+    transition: none;
+  }
+}
+
+.modal h2 {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.modal p {
+  font-size: 14px;
+  color: var(--ink-soft);
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+.modal .big-earn {
+  font-size: 31px;
+  font-weight: 800;
+  color: var(--coral-dark);
+  margin: 12px 0 2px;
+}
+
+.modal .row {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.modal .row .btn {
+  flex: 1;
+}
+
+/* cofre del modal offline (dibujado a CSS, mismo lenguaje que la escena) */
+.chest {
+  width: 92px;
+  height: 66px;
+  margin: 14px auto 4px;
+  position: relative;
+}
+
+.chest .lid {
+  position: absolute;
+  top: 0;
+  width: 100%;
+  height: 30px;
+  background: var(--coral);
+  border: var(--border);
+  border-radius: 14px 14px 3px 3px;
+  transform-origin: bottom center;
+  animation: lid 1s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s both;
+}
+
+.chest .box {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 38px;
+  background: #b58a5c;
+  border: var(--border);
+  border-radius: 3px 3px 8px 8px;
+}
+
+.chest .lock {
+  position: absolute;
+  left: 50%;
+  top: 26px;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 18px;
+  background: var(--mustard);
+  border: var(--border);
+  border-radius: 4px;
+  z-index: 2;
+}
+
+.chest .coins-glow {
+  position: absolute;
+  left: 50%;
+  top: 8px;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 22px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(223, 169, 62, 0.9), rgba(223, 169, 62, 0));
+  animation: glowIn 0.8s ease 0.6s both;
+}
+
+@keyframes lid {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-38deg) translateY(-6px);
+  }
+}
+
+@keyframes glowIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- toasts ---------- */
+.toasts {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 40;
+  width: min(340px, calc(100vw - 32px));
+  pointer-events: none !important;
+}
+
+.toast {
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--r);
+  border: 2px solid var(--paper);
+  box-shadow: var(--shadow);
+  padding: 10px 14px;
+  font-size: 13.5px;
+  font-weight: 700;
+  text-align: center;
+  animation: toastIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), toastOut 0.4s ease 2.6s both;
+}
+
+@keyframes toastIn {
+  from {
+    transform: translateY(14px) scale(0.9);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@keyframes toastOut {
+  to {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+}
+
+/* ---------- tutorial ---------- */
+.tutor-hand {
+  position: absolute;
+  z-index: 45;
+  pointer-events: none !important;
+  width: 54px;
+  height: 54px;
+  filter: drop-shadow(2px 3px 0 rgba(35, 48, 71, 0.3));
+  animation: handTap 1.1s ease-in-out infinite;
+}
+
+@keyframes handTap {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(-12deg);
+  }
+  50% {
+    transform: translate(-7px, -10px) rotate(-6deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tutor-hand {
+    animation: none;
+  }
+}
+
+.tutor-tip {
+  position: absolute;
+  z-index: 45;
+  pointer-events: none !important;
+  background: var(--ink);
+  color: var(--paper);
+  border-radius: var(--r);
+  padding: 9px 13px;
+  font-size: 13.5px;
+  font-weight: 700;
+  max-width: 230px;
+  text-align: center;
+  box-shadow: var(--shadow);
+}
+
+.tutor-tip::after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background: var(--ink);
+}
+
+/* botón cobrar-todo flotante */
+.collect-all {
+  position: absolute;
+  bottom: 84px;
+  right: 14px;
+  z-index: 28;
+}
+
+/* desktop: más aire */
+@media (min-width: 900px) {
+  .missions-panel {
+    width: 330px;
+  }
+  .sheet {
+    left: auto;
+    right: 18px;
+    transform: none;
+    width: 420px;
+    border-radius: 18px 18px 0 0;
+  }
+  .collect-all {
+    right: 456px;
+  }
+  .toasts {
+    left: 40%;
+  }
+}
