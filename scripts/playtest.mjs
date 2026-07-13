@@ -41,9 +41,9 @@ async function tapBoat(page) {
     const s = window.TH.state;
     const idx = s.boats.findIndex((b) => b.phase === "ready");
     if (idx < 0) return false;
-    // Amárre visible: barre la línea de amarres (misma ruta que un pulgar impreciso).
+    // Amarre visible: barre la línea de amarres (misma ruta que un pulgar impreciso).
     const c = document.getElementById("game-canvas");
-    const y = window.innerHeight * (window.innerWidth > 900 ? 0.62 : 0.58) - 14;
+    const y = window.innerHeight * 0.76 - 12;
     for (let x = 20; x < window.innerWidth; x += 30) {
       c.dispatchEvent(new PointerEvent("pointerdown", { clientX: x, clientY: y, bubbles: true }));
     }
@@ -107,7 +107,7 @@ async function run(label, w, h) {
   await page.evaluate(() => {
     const c = document.getElementById("game-canvas");
     const x = window.innerWidth * 0.5;
-    const y = window.innerHeight * 0.34 + (window.innerHeight * (window.innerWidth > 900 ? 0.62 : 0.58) - window.innerHeight * 0.34) * 0.5;
+    const y = window.innerHeight * 0.56; // centro del mar (horizonte 0.36, muelle 0.76)
     c.dispatchEvent(new PointerEvent("pointerdown", { clientX: x, clientY: y, bubbles: true }));
   });
   await sleep(300);

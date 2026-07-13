@@ -22,6 +22,7 @@ import {
 import { formatDuration, formatMoney } from "../sim/format";
 import type { OfflineResult } from "../sim/offline";
 import type { GameState } from "../sim/types";
+import { boatThumbURL } from "../render/sprites";
 
 export interface UIActions {
   buyBoat(tier: number): void;
@@ -51,14 +52,8 @@ const svg = {
 };
 
 function boatThumb(tier: number): string {
-  const t = C.BOAT_TIERS[tier];
-  const w = 22 + t.size * 8;
-  return `<svg class="thumb" viewBox="0 0 60 44" fill="none">
-    <path d="M${30 - w / 2} 26h${w}l-6 9H${30 - w / 2 + 6}l-6-9z" fill="${t.hull}" stroke="#233047" stroke-width="2.4" stroke-linejoin="round"/>
-    ${tier >= 1 ? `<rect x="${26 - w * 0.14}" y="15" width="${w * 0.34}" height="11" rx="2" fill="#f2e8d5" stroke="#233047" stroke-width="2"/>` : ""}
-    <path d="M${30 + w * 0.18} ${tier >= 2 ? 4 : 9}v22" stroke="#233047" stroke-width="2"/>
-    <path d="M${30 + w * 0.18} ${tier >= 2 ? 5 : 10}l10 3-10 3z" fill="#e0684b" stroke="#233047" stroke-width="1.6" stroke-linejoin="round"/>
-  </svg>`;
+  // Sprite pixel real del barco (mismo arte que la escena).
+  return `<img class="thumb" src="${boatThumbURL(tier)}" alt="" style="image-rendering:pixelated;object-fit:contain">`;
 }
 
 const PHASE_TEXT: Record<string, string> = {

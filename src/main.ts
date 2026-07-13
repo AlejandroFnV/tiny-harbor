@@ -165,10 +165,7 @@ const actions = {
 const ui = new UI(uiRoot, () => state, actions);
 const tutorial = new Tutorial(() => state, renderer, ui);
 
-// Grano de imprenta encima de todo.
-const grain = document.createElement("div");
-grain.className = "grain";
-document.body.appendChild(grain);
+// (El grano riso de la v1 se retiró: el pixel art va limpio.)
 
 // --------------------------------------------------------------------------- input
 function canvasTap(x: number, y: number): void {

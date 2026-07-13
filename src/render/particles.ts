@@ -225,60 +225,64 @@ export class Particles {
     }
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
+  /**
+   * Dibuja en estilo pixel: coordenadas y tamaños alineados a la rejilla de
+   * arte (px = píxeles de pantalla por píxel de arte). Todo son rects.
+   */
+  draw(ctx: CanvasRenderingContext2D, px = 3): void {
+    const snap = (v: number) => Math.round(v / px) * px;
     for (const p of this.pool) {
       if (!p.alive) continue;
       const t = p.life / p.ttl;
       const fade = t > 0.7 ? 1 - (t - 0.7) / 0.3 : 1;
       ctx.save();
       ctx.globalAlpha = fade;
+      const x = snap(p.x);
+      const y = snap(p.y);
       switch (p.kind) {
-        case "coin":
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.rot);
-          // Moneda: elipse que "gira" (escala X oscilante) con borde de tinta.
-          ctx.scale(Math.abs(Math.cos(p.rot * 1.4)) * 0.7 + 0.3, 1);
+        case "coin": {
+          // Moneda pixel que "gira": el ancho oscila en pasos enteros.
+          const d = Math.max(px, snap(p.size * 1.6));
+          const wSteps = Math.max(1, Math.round((Math.abs(Math.cos(p.rot)) * d) / px));
+          const w = wSteps * px;
+          ctx.fillStyle = INK.ink;
+          ctx.fillRect(x - w / 2 - px, y - d / 2, w + px * 2, d);
           ctx.fillStyle = p.color;
-          ctx.strokeStyle = INK.ink;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(0, 0, p.size, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
+          ctx.fillRect(x - w / 2, y - d / 2 + px, w, d - px * 2);
           break;
+        }
         case "splash":
-        case "spark":
+        case "spark": {
+          const s = Math.max(px, snap(p.size * 1.4));
           ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillRect(x - s / 2, y - s / 2, s, s);
           break;
-        case "confetti":
-          ctx.translate(p.x, p.y);
-          ctx.rotate(p.rot);
+        }
+        case "confetti": {
+          const s = Math.max(px, snap(p.size));
           ctx.fillStyle = p.color;
-          ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+          // alterna horizontal/vertical al "girar"
+          if (Math.sin(p.rot) > 0) ctx.fillRect(x - s, y - s / 2, s * 2, s);
+          else ctx.fillRect(x - s / 2, y - s, s, s * 2);
           break;
-        case "smoke":
+        }
+        case "smoke": {
+          const s = Math.max(px, snap(p.size * 1.6));
           ctx.fillStyle = p.color;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.fillRect(x - s / 2, y - s / 2, s, s);
           break;
-        case "ripple":
-          ctx.strokeStyle = p.color;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.ellipse(p.x, p.y, p.size, p.size * 0.35, 0, 0, Math.PI * 2);
-          ctx.stroke();
+        }
+        case "ripple": {
+          // Anillo horizontal que se abre: dos guiones separándose.
+          const half = snap(p.size * 1.4);
+          ctx.fillStyle = p.color;
+          ctx.fillRect(x - half, y, px * 2, px);
+          ctx.fillRect(x + half - px * 2, y, px * 2, px);
           break;
+        }
         case "rain":
-          ctx.strokeStyle = p.color;
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(p.x - 3, p.y + p.size);
-          ctx.stroke();
+          ctx.fillStyle = p.color;
+          ctx.fillRect(x, y, px, px * 3);
           break;
         case "text":
           ctx.font = `700 ${p.size}px 'Bricolage Grotesque Variable', sans-serif`;
@@ -290,23 +294,12 @@ export class Particles {
           ctx.fillText(p.text, p.x, p.y);
           break;
         case "fish": {
-          ctx.translate(p.x, p.y);
-          const ang = Math.atan2(p.vy, p.vx);
-          ctx.rotate(ang);
+          // Pececillo: cuerpo horizontal + cola en el lado contrario al avance.
+          const dir = p.vx >= 0 ? 1 : -1;
           ctx.fillStyle = p.color;
-          ctx.strokeStyle = INK.ink;
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.ellipse(0, 0, p.size, p.size * 0.45, 0, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-          // cola
-          ctx.beginPath();
-          ctx.moveTo(-p.size, 0);
-          ctx.lineTo(-p.size - 4, -3);
-          ctx.lineTo(-p.size - 4, 3);
-          ctx.closePath();
-          ctx.fill();
+          ctx.fillRect(x - px * 1.5, y - px / 2, px * 3, px);
+          ctx.fillRect(x - dir * px * 2, y - px, px, px);
+          ctx.fillRect(x - dir * px * 2, y + px * 0.5 - px, px, px);
           break;
         }
       }
