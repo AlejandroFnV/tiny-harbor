@@ -310,7 +310,7 @@ export class Renderer {
     if (night < 0.95) {
       const p = Math.min(1, dayT / 0.55);
       const sx = Math.round(this.aw * (0.12 + 0.76 * p)) - SUN.w;
-      const sy = Math.round(H * (0.72 - Math.sin(p * Math.PI) * 0.5)) - SUN.h;
+      const sy = Math.max(3, Math.round(H * (0.72 - Math.sin(p * Math.PI) * 0.5)) - SUN.h);
       g.globalAlpha = 1 - night;
       g.drawImage(raster(SUN, step), sx, sy, SUN.w * 2, SUN.h * 2);
       g.globalAlpha = 1;
