@@ -2,3 +2,4 @@ node_modules/
 dist/
 playtest-shots/
 .DS_Store
+.vercel
