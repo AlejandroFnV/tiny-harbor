@@ -22,7 +22,7 @@ import {
 import { formatDuration, formatMoney } from "../sim/format";
 import type { OfflineResult } from "../sim/offline";
 import type { GameState } from "../sim/types";
-import { boatThumbURL } from "../render/sprites";
+import { boatThumbURL, speciesThumbURL } from "../render/sprites";
 
 export interface UIActions {
   buyBoat(tier: number): void;
@@ -33,7 +33,10 @@ export interface UIActions {
   prestige(): void;
   resolveStorm(choice: "shelter" | "risk"): void;
   collectAll(): void;
+  acceptOrder(): void;
+  declineOrder(): void;
   toggleMute(): boolean;
+  toggleMusic(): boolean;
   resetGame(): void;
   uiSound(): void;
 }
@@ -101,7 +104,7 @@ export class UI {
       <button class="btn missions-btn" id="missions-btn" data-action="toggle-missions">${svg.scroll} Misiones <span class="badge" id="missions-badge">3</span></button>
       <div class="missions-panel" id="missions-panel" hidden></div>
 
-      <div id="event-slot"></div>
+      <div class="banners"><div id="event-slot"></div><div id="order-slot"></div></div>
 
       <button class="btn primary collect-all" id="collect-all" data-action="collect-all" hidden>Cobrar todo</button>
 
@@ -156,6 +159,13 @@ export class UI {
       case "collect-all": this.act.collectAll(); break;
       case "storm-shelter": this.act.resolveStorm("shelter"); break;
       case "storm-risk": this.act.resolveStorm("risk"); break;
+      case "order-accept": this.act.acceptOrder(); break;
+      case "order-decline": this.act.declineOrder(); break;
+      case "toggle-music": {
+        const on = this.act.toggleMusic();
+        el.textContent = on ? "Sonando" : "Apagada";
+        break;
+      }
       case "toggle-missions":
         this.missionsPanelOpen = !this.missionsPanelOpen;
         this.missionsOpened = true;
@@ -264,6 +274,12 @@ export class UI {
       ${mLvl >= C.MANAGER_MAX_LVL ? "" : `<button class="btn primary" data-action="hire-manager">${mLvl === 0 ? "Contratar" : "Subir"}<span class="sub" data-cost-label></span></button>`}
     </div>`;
 
+    html += `<div class="card">
+      <div class="info"><div class="name">Música del puerto</div>
+      <div class="desc">Un vals marinero de fondo. El resto de sonidos van aparte.</div></div>
+      <button class="btn" data-action="toggle-music">${s.settings.music ? "Sonando" : "Apagada"}</button>
+    </div>`;
+
     html += `<div class="section-title">CUENTAS</div>
     <div class="stat-grid">
       <div class="stat"><b data-live="rate">${formatMoney(rate)}/s</b><span>ingresos de la flota</span></div>
@@ -277,22 +293,38 @@ export class UI {
   private renderMapa(): string {
     const s = this.getState();
     const next = nextZone(s);
-    let html = `<div class="section-title">CARTA DE PESCA</div><div class="zone-map">`;
+    const found = s.discovered.length;
+    const total = C.SPECIES.length;
+    let html = `<div class="section-title">CARTA DE PESCA</div>
+    <div class="card" style="justify-content:space-between">
+      <div class="info"><div class="name">Pescadoteca ${found}/${total}</div>
+      <div class="desc">Cada especie descubierta: +${C.SPECIES_INCOME_BONUS * 100}% de ingresos, para siempre.</div></div>
+    </div>
+    <div class="zone-map">`;
     C.ZONES.forEach((z, i) => {
       const unlocked = i <= s.zonesUnlocked;
       const current = i === s.zonesUnlocked;
       const isNext = next === i;
       const cls = current ? "current" : unlocked ? "unlocked" : "";
+      const species = C.SPECIES.filter((sp) => sp.zone === i);
+      const fishes = species
+        .map((sp) => {
+          const disc = s.discovered.includes(sp.id);
+          return `<img class="fish-thumb ${disc ? "" : "unknown"}" src="${speciesThumbURL(sp.id, disc)}"
+            alt="${disc ? sp.name : "especie sin descubrir"}" title="${disc ? sp.name : "???"}">`;
+        })
+        .join("");
       html += `<div class="zone-item ${cls}">
         <div class="buoy">${current ? `<svg viewBox="0 0 24 24" width="20" fill="none"><path d="M4 14h16l-3 5H7l-3-5z" fill="#f2e8d5" stroke="#233047" stroke-width="1.8" stroke-linejoin="round"/><path d="M12 3v11" stroke="#233047" stroke-width="1.8"/><path d="M12 4c4 1 5 4 5 7h-5V4z" fill="#f2e8d5" stroke="#233047" stroke-width="1.8" stroke-linejoin="round"/></svg>` : unlocked ? "✓" : "·"}</div>
         <div class="info">
           <div class="name">${z.name}</div>
           <div class="desc">pesca ×${z.valueMult}${current ? " · la flota faena aquí" : ""}</div>
+          <div class="fish-row">${fishes}</div>
         </div>
         ${isNext ? `<button class="btn primary" data-action="unlock-zone" data-cost="${z.unlockCost}">Desbloquear<span class="sub" data-cost-label></span></button>` : ""}
       </div>`;
     });
-    html += `</div><p style="font-size:12px;color:var(--ink-soft);padding:0 4px">La flota entera faena en el caladero más lejano: más lejos, mejor pesca.</p>`;
+    html += `</div><p style="font-size:12px;color:var(--ink-soft);padding:0 4px">La flota entera faena en el caladero más lejano: más lejos, mejor pesca y especies más raras.</p>`;
     return html;
   }
 
@@ -434,6 +466,7 @@ export class UI {
     }
 
     this.renderEventBanner(s);
+    this.renderOrderBanner(s);
     this.renderMissions(false);
 
     // ¿La estructura cambió por debajo? (compra desde otra vía, prestigio…)
@@ -506,6 +539,49 @@ export class UI {
           ev.kind === "frenzy" ? C.FRENZY_DURATION_S : ev.stage === "warning" ? C.STORM_WARNING_S : C.STORM_DURATION_S;
         bar.style.width = `${Math.max(0, (ev.remaining / total) * 100)}%`;
       }
+    }
+  }
+
+  // ------------------------------------------------------------------ pedidos
+  private lastOrderKey = "";
+  private renderOrderBanner(s: GameState): void {
+    const slot = document.getElementById("order-slot")!;
+    const o = s.order;
+    const key = o ? `${o.stage}:${Math.round(o.goal)}` : "";
+    if (key !== this.lastOrderKey) {
+      this.lastOrderKey = key;
+      if (!o) {
+        slot.innerHTML = "";
+      } else if (o.stage === "offer") {
+        slot.innerHTML = `<div class="event-banner order">
+          <h3>Pedido de la lonja</h3>
+          <p>Un cliente quiere <b>${formatMoney(o.goal)}</b> de pesca en ${Math.round(C.ORDER_TIME_S)}s.
+          Paga un bono de <b>+${formatMoney(o.reward)}</b>.</p>
+          <div class="row">
+            <button class="btn" data-action="order-decline">Ahora no</button>
+            <button class="btn primary" data-action="order-accept">Aceptar</button>
+          </div>
+          <div class="timer"><i></i></div>
+        </div>`;
+      } else {
+        slot.innerHTML = `<div class="event-banner order">
+          <h3>Pedido en marcha</h3>
+          <p><span data-order-progress>0</span> / ${formatMoney(o.goal)} · bono +${formatMoney(o.reward)}</p>
+          <div class="bar-order"><i></i></div>
+          <div class="timer"><i></i></div>
+        </div>`;
+      }
+    }
+    if (o) {
+      const timer = slot.querySelector<HTMLElement>(".timer i");
+      if (timer) {
+        const total = o.stage === "offer" ? C.ORDER_OFFER_S : C.ORDER_TIME_S;
+        timer.style.width = `${Math.max(0, (o.remaining / total) * 100)}%`;
+      }
+      const prog = slot.querySelector<HTMLElement>("[data-order-progress]");
+      if (prog) prog.textContent = formatMoney(o.progress);
+      const bar = slot.querySelector<HTMLElement>(".bar-order i");
+      if (bar) bar.style.width = `${Math.min(100, (o.progress / o.goal) * 100)}%`;
     }
   }
 

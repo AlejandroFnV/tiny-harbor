@@ -12,6 +12,7 @@ import type { GameState } from "./types";
 /**
  * Migraciones: índice N transforma un save de versión N a N+1.
  * v1 → v2: se añadieron stats.taps y settings (solo muted); misiones ganaron `param`.
+ * v2 → v3: pedidos de la lonja (order/orderT), pescadoteca (discovered) y settings.music.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -25,6 +26,15 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
       }
     }
     raw.version = 2;
+  },
+  2: (raw) => {
+    if (!Array.isArray(raw.discovered)) raw.discovered = [];
+    if (raw.order === undefined) raw.order = null;
+    if (typeof raw.orderT !== "number") raw.orderT = 240;
+    const settings = (raw.settings ?? { muted: false }) as Record<string, unknown>;
+    if (typeof settings.music !== "boolean") settings.music = true;
+    raw.settings = settings;
+    raw.version = 3;
   },
 };
 

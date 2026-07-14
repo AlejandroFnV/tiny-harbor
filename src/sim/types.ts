@@ -39,6 +39,18 @@ export interface Mission {
 
 export type ActiveEventKind = "frenzy" | "storm";
 
+/** Pedido de la lonja: cliente pide X de pesca en T segundos por un bono. */
+export interface ActiveOrder {
+  stage: "offer" | "active";
+  /** Pesca (monedas ganadas) que pide. */
+  goal: number;
+  /** Progreso acumulado desde que se aceptó. */
+  progress: number;
+  /** Segundos restantes de la fase actual (oferta o cuenta atrás). */
+  remaining: number;
+  reward: number;
+}
+
 export interface ActiveEvent {
   kind: ActiveEventKind;
   /** Segundos restantes de la fase actual del evento. */
@@ -78,13 +90,20 @@ export interface GameState {
   /** Segundos hasta el próximo evento. */
   eventT: number;
 
+  order: ActiveOrder | null;
+  /** Segundos hasta el próximo pedido de la lonja. */
+  orderT: number;
+
+  /** Pescadoteca: ids de especies descubiertas. PERSISTE entre prestigios. */
+  discovered: string[];
+
   /** Reloj de pared (ms epoch) de la última vez que se vio el juego (offline calc). */
   lastSeen: number;
   /** Tiempo total jugado (s, esta vuelta). */
   playTime: number;
   tutorialStep: number;
 
-  settings: { muted: boolean };
+  settings: { muted: boolean; music: boolean };
   stats: { collects: number; boatsBought: number; upgrades: number; taps: number };
   rngSeed: number;
 }
@@ -97,4 +116,8 @@ export type SimEvent =
   | { kind: "cargo_lost"; boatId: number; amount: number }
   | { kind: "event_start"; event: ActiveEventKind }
   | { kind: "event_end"; event: ActiveEventKind }
-  | { kind: "mission_done"; missionId: number; reward: number; text: string };
+  | { kind: "mission_done"; missionId: number; reward: number; text: string }
+  | { kind: "order_offer"; goal: number; reward: number }
+  | { kind: "order_done"; reward: number }
+  | { kind: "order_gone" }
+  | { kind: "species_found"; id: string };

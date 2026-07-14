@@ -20,7 +20,11 @@ export class AudioEngine {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
   private ambient: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+  private musicStep = 0;
+  private musicNextT = 0;
   private _muted = false;
+  private _music = true;
   private collectPitch = 0; // sube con cobros rápidos seguidos (combo sutil)
   private lastCollect = 0;
 
@@ -32,6 +36,13 @@ export class AudioEngine {
     this._muted = m;
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.03);
+    }
+  }
+
+  setMusic(on: boolean): void {
+    this._music = on;
+    if (this.musicGain && this.ctx) {
+      this.musicGain.gain.setTargetAtTime(on ? 1 : 0, this.ctx.currentTime, 0.2);
     }
   }
 
@@ -57,6 +68,7 @@ export class AudioEngine {
     this.master.connect(comp);
     comp.connect(ctx.destination);
     this.startAmbient();
+    this.startMusic();
   }
 
   suspend(): void {
@@ -139,6 +151,77 @@ export class AudioEngine {
       g.connect(this.master!);
       o.start(t);
       o.stop(t + 0.25);
+    }
+  }
+
+  // --- música ---------------------------------------------------------------------
+  /**
+   * Vals marinero chiptune procedural (3/4, ~90bpm): bajo en corcheas de vals +
+   * melodía pentatónica de triángulo. Scheduler con lookahead sobre el reloj
+   * del AudioContext (setInterval solo dispara la planificación, no el sonido).
+   */
+  private startMusic(): void {
+    const ctx = this.ctx!;
+    this.musicGain = ctx.createGain();
+    this.musicGain.gain.value = this._music ? 1 : 0;
+    this.musicGain.connect(this.master!);
+
+    // 24 pasos de corchea = 8 compases de 3/4. Nota MIDI o 0 = silencio.
+    const LEAD = [
+      69, 0, 72, 74, 0, 72, 69, 0, 67, 64, 0, 67,
+      69, 0, 72, 76, 0, 74, 72, 0, 69, 67, 0, 64,
+    ];
+    const BASS = [45, 0, 0, 41, 0, 0, 43, 0, 0, 45, 0, 0, 45, 0, 0, 41, 0, 0, 43, 0, 0, 38, 0, 0];
+    const STEP_S = 60 / 90 / 2; // corchea a 90bpm
+
+    const freq = (midi: number) => 440 * Math.pow(2, (midi - 69) / 12);
+    const noteAt = (midi: number, t: number, type: OscillatorType, vol: number, dur: number) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = freq(midi);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g);
+      g.connect(this.musicGain!);
+      o.start(t);
+      o.stop(t + dur + 0.05);
+    };
+
+    this.musicNextT = ctx.currentTime + 0.1;
+    const schedule = () => {
+      if (!this.ctx || this.ctx.state !== "running") return;
+      // Planifica con 0.4s de antelación.
+      while (this.musicNextT < ctx.currentTime + 0.4) {
+        const i = this.musicStep % LEAD.length;
+        const lead = LEAD[i];
+        const bass = BASS[i];
+        if (lead) noteAt(lead, this.musicNextT, "triangle", 0.045, STEP_S * 1.8);
+        if (bass) noteAt(bass, this.musicNextT, "square", 0.03, STEP_S * 2.6);
+        this.musicStep++;
+        this.musicNextT += STEP_S;
+      }
+    };
+    window.setInterval(schedule, 120);
+  }
+
+  /** Campanada de puerto (amanecer/anochecer). */
+  bell(): void {
+    if (!this.ctx || this._muted) return;
+    const ctx = this.ctx;
+    for (const [f, v, d] of [[520, 0.08, 2.4], [780, 0.04, 1.6], [1310, 0.02, 0.9]] as const) {
+      const t = ctx.currentTime + 0.02;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(v, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g);
+      g.connect(this.master!);
+      o.start(t);
+      o.stop(t + d + 0.1);
     }
   }
 

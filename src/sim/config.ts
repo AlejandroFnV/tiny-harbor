@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -159,6 +159,73 @@ export const ACTIVE_MISSIONS = 3;
 /** Recompensa = max(MISSION_REWARD_MIN, income_rate * MISSION_REWARD_SECONDS). */
 export const MISSION_REWARD_SECONDS = 75;
 export const MISSION_REWARD_MIN = 30;
+
+// ---------------------------------------------------------------------------
+// Pedidos de la lonja (cliente en el muelle: "X de pesca en T segundos")
+// ---------------------------------------------------------------------------
+/** No hay pedidos antes de este tiempo de vuelta (s). */
+export const ORDER_WARMUP_S = 240;
+/** Intervalo entre pedidos (s). */
+export const ORDER_INTERVAL_MIN_S = 150;
+export const ORDER_INTERVAL_MAX_S = 320;
+/** Objetivo = incomeRate * estos segundos (lo normal se consigue pescando bien). */
+export const ORDER_GOAL_SECONDS = 45;
+export const ORDER_GOAL_MIN = 100;
+/** Tiempo para completarlo una vez aceptado (s). */
+export const ORDER_TIME_S = 90;
+/** Ventana para aceptar la oferta (s); si no, el cliente se va sin drama. */
+export const ORDER_OFFER_S = 25;
+/** Bono al completar = objetivo × factor. */
+export const ORDER_REWARD_FACTOR = 0.6;
+
+// ---------------------------------------------------------------------------
+// Pescadoteca (colección de especies, persiste entre prestigios)
+// ---------------------------------------------------------------------------
+export type SpeciesRarity = "comun" | "rara" | "epica";
+
+export interface SpeciesDef {
+  id: string;
+  name: string;
+  /** Zona (índice en ZONES) donde se puede descubrir. */
+  zone: number;
+  rarity: SpeciesRarity;
+}
+
+/** Probabilidad de descubrimiento POR COBRO (solo especies de la zona actual aún no descubiertas). */
+export const SPECIES_CHANCE: Record<SpeciesRarity, number> = {
+  comun: 0.07,
+  rara: 0.02,
+  epica: 0.006,
+};
+
+/** Bonus permanente de ingresos por especie descubierta (+1% cada una). */
+export const SPECIES_INCOME_BONUS = 0.01;
+
+export const SPECIES: SpeciesDef[] = [
+  // Bahía
+  { id: "sardina", name: "Sardina", zone: 0, rarity: "comun" },
+  { id: "boqueron", name: "Boquerón", zone: 0, rarity: "comun" },
+  { id: "caballa", name: "Caballa", zone: 0, rarity: "rara" },
+  { id: "caballito", name: "Caballito de mar", zone: 0, rarity: "epica" },
+  // Costa
+  { id: "dorada", name: "Dorada", zone: 1, rarity: "comun" },
+  { id: "lubina", name: "Lubina", zone: 1, rarity: "comun" },
+  { id: "pulpo", name: "Pulpo", zone: 1, rarity: "rara" },
+  { id: "morena", name: "Morena", zone: 1, rarity: "epica" },
+  // Bajío
+  { id: "bonito", name: "Bonito", zone: 2, rarity: "comun" },
+  { id: "merluza", name: "Merluza", zone: 2, rarity: "comun" },
+  { id: "pezluna", name: "Pez luna", zone: 2, rarity: "rara" },
+  { id: "mantaraya", name: "Manta raya", zone: 2, rarity: "epica" },
+  // Alta mar
+  { id: "atun", name: "Atún rojo", zone: 3, rarity: "comun" },
+  { id: "pezespada", name: "Pez espada", zone: 3, rarity: "rara" },
+  { id: "tiburon", name: "Tiburón azul", zone: 3, rarity: "epica" },
+  // Abismo
+  { id: "rape", name: "Rape abisal", zone: 4, rarity: "comun" },
+  { id: "pezdragon", name: "Pez dragón", zone: 4, rarity: "rara" },
+  { id: "calamargigante", name: "Calamar gigante", zone: 4, rarity: "epica" },
+];
 
 // ---------------------------------------------------------------------------
 // Autosave / loop

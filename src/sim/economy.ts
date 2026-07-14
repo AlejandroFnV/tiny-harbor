@@ -9,6 +9,11 @@ export function prestigeMult(state: GameState): number {
   return 1 + state.reputation * C.PRESTIGE_MULT_PER_REP;
 }
 
+/** Bonus permanente de la pescadoteca (+1% por especie descubierta). */
+export function speciesMult(state: GameState): number {
+  return 1 + state.discovered.length * C.SPECIES_INCOME_BONUS;
+}
+
 /** Multiplicador de evento activo sobre ingresos. */
 export function eventMult(state: GameState): number {
   const ev = state.event;
@@ -53,7 +58,9 @@ export function cycleTime(state: GameState, boat: Boat): number {
 export function cargoValue(state: GameState, boat: Boat): number {
   const def = C.BOAT_TIERS[boat.tier];
   const zone = C.ZONES[state.zonesUnlocked];
-  return def.baseCargo * (1 + C.CAP_BONUS * boat.capLvl) * zone.valueMult * prestigeMult(state);
+  return (
+    def.baseCargo * (1 + C.CAP_BONUS * boat.capLvl) * zone.valueMult * prestigeMult(state) * speciesMult(state)
+  );
 }
 
 /** Ingresos medios por segundo de toda la flota (para offline, misiones, UI). */

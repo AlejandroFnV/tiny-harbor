@@ -163,7 +163,7 @@ export class Particles {
     p.color = "#b8d4c2";
   }
 
-  spark(x: number, y: number, n = 10, color = INK.mustard): void {
+  spark(x: number, y: number, n = 10, color: string = INK.mustard): void {
     for (let i = 0; i < n; i++) {
       const p = this.spawn("spark", x, y);
       const a = Math.random() * Math.PI * 2;

@@ -353,6 +353,163 @@ export const FISH = sprite("fish", { G: "foam", I: "ink" }, [
   ".GGG..",
 ]);
 
+/** Cliente de la lonja esperando en el muelle (pedido). */
+export const CLIENT = sprite("client", { I: "ink", P: "paper", C: "coral", M: "must", R: "roof" }, [
+  "..MMM..",
+  "..PPP..",
+  "..IPI..",
+  "..PPP..",
+  ".RRRRR.",
+  "RIRRRIR",
+  "R.RRR.R",
+  "..R.R..",
+  "..R.R..",
+  "..I.I..",
+]);
+
+// ---------------------------------------------------------------------------
+// Pescadoteca: siluetas base + color por especie
+// ---------------------------------------------------------------------------
+const F = { B: "body", F: "white", I: "ink" }; // B se tiñe por especie
+
+const FISH_SHAPES: Record<string, Sprite> = {
+  small: sprite("f-small", F, [
+    "..BBBB...",
+    "BBBBBBBI.",
+    "..BBBB...",
+  ]),
+  long: sprite("f-long", F, [
+    "...BBBBBBB...",
+    ".BBBBBBBBBBI.",
+    "...BBBBBBB...",
+  ]),
+  round: sprite("f-round", F, [
+    "..BBBB..",
+    ".BBBBBB.",
+    "BBBBBBBI",
+    ".BBBBBB.",
+    "..BBBB..",
+  ]),
+  big: sprite("f-big", F, [
+    "....BBBBBB....",
+    "..BBBBBBBBBB..",
+    "BBBBBBBBBBBBI.",
+    "..BBBBBBBBBB..",
+    "....BBBBBB....",
+  ]),
+  sword: sprite("f-sword", F, [
+    ".....BBBBBB.....",
+    "BBBBBBBBBBBBBI..",
+    ".....BBBBBB.....",
+  ]),
+  shark: sprite("f-shark", F, [
+    ".....B........",
+    "....BBB.......",
+    "..BBBBBBBBBB..",
+    "BBBBBBBBBBBBI.",
+    "..BBBBBBBBBB..",
+  ]),
+  eel: sprite("f-eel", F, [
+    "BB....BB......",
+    ".BBBBBBBBBBBI.",
+    "......BB....BB",
+  ]),
+  ray: sprite("f-ray", F, [
+    "....BB....",
+    "..BBBBBB..",
+    "BBBBBBBBBB",
+    "..BBBBBB..",
+    "....BB..BB",
+  ]),
+  octo: sprite("f-octo", F, [
+    "..BBBB..",
+    ".BBBBBB.",
+    ".BIBBIB.",
+    ".BBBBBB.",
+    "B.B..B.B",
+    ".B.BB.B.",
+  ]),
+  seahorse: sprite("f-seahorse", F, [
+    "..BBB.",
+    ".BBIB.",
+    "..BB..",
+    ".BBB..",
+    ".BB...",
+    ".BBB..",
+    "..BB..",
+  ]),
+  angler: sprite("f-angler", F, [
+    "..F.......",
+    "..B.......",
+    ".BBBBBB...",
+    "BBIBBBBBI.",
+    ".BBBBBB...",
+  ]),
+  squid: sprite("f-squid", F, [
+    "...BBB....",
+    "..BBBBB...",
+    "..BIBIB...",
+    "..BBBBB...",
+    ".B.B.B.B..",
+    "B..B.B..B.",
+    "..B...B...",
+  ]),
+};
+
+/** Silueta y color por especie de config. */
+const SPECIES_ART: Record<string, { shape: keyof typeof FISH_SHAPES; color: string }> = {
+  sardina: { shape: "small", color: "#9fb8c8" },
+  boqueron: { shape: "small", color: "#7f9db5" },
+  caballa: { shape: "long", color: "#4a8f96" },
+  caballito: { shape: "seahorse", color: "#e3a04b" },
+  dorada: { shape: "round", color: "#d8b04e" },
+  lubina: { shape: "long", color: "#a8b5b5" },
+  pulpo: { shape: "octo", color: "#9a6bb0" },
+  morena: { shape: "eel", color: "#7d9354" },
+  bonito: { shape: "long", color: "#5580b0" },
+  merluza: { shape: "long", color: "#8a9aa5" },
+  pezluna: { shape: "round", color: "#c8ccd4" },
+  mantaraya: { shape: "ray", color: "#4a5a75" },
+  atun: { shape: "big", color: "#b05555" },
+  pezespada: { shape: "sword", color: "#6a8fc0" },
+  tiburon: { shape: "shark", color: "#7086a0" },
+  rape: { shape: "angler", color: "#8a6a50" },
+  pezdragon: { shape: "eel", color: "#50647d" },
+  calamargigante: { shape: "squid", color: "#c06858" },
+};
+
+const fishURLCache = new Map<string, string>();
+
+/** Miniatura de especie para el álbum (silueta a tinta si no está descubierta). */
+export function speciesThumbURL(id: string, discovered: boolean): string {
+  const key = `${id}:${discovered ? 1 : 0}`;
+  const hit = fishURLCache.get(key);
+  if (hit) return hit;
+  const art = SPECIES_ART[id] ?? { shape: "small", color: "#888888" };
+  const spr = FISH_SHAPES[art.shape];
+  const s = 3;
+  const cv = document.createElement("canvas");
+  cv.width = spr.w * s;
+  cv.height = spr.h * s;
+  const ctx = cv.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  const body = discovered ? art.color : "#3a415580";
+  const ink = discovered ? "#2b3245" : "#3a415580";
+  const white = discovered ? "#fbf6e8" : "#3a415580";
+  for (let y = 0; y < spr.rows.length; y++) {
+    const row = spr.rows[y];
+    for (let x = 0; x < row.length; x++) {
+      const ch = row[x];
+      if (ch === "." || ch === " ") continue;
+      ctx.fillStyle = ch === "B" ? body : ch === "I" ? ink : white;
+      ctx.fillRect(x * s, y * s, s, s);
+    }
+  }
+  const url = cv.toDataURL();
+  fishURLCache.set(key, url);
+  return url;
+}
+
 // ---------------------------------------------------------------------------
 // Raster + caché
 // ---------------------------------------------------------------------------

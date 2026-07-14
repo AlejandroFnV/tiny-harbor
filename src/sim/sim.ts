@@ -13,6 +13,7 @@ import {
   cycleTime,
   dockCost,
   eventMult,
+  incomeRate,
   managerCost,
   nextZone,
   prestigeGain,
@@ -39,7 +40,33 @@ function gainMoney(state: GameState, amount: number, events: SimEvent[]): void {
   state.money += amount;
   state.lifetime += amount;
   state.totalEarned += amount;
+  // Pedido de la lonja activo: toda pesca cuenta para el objetivo.
+  const order = state.order;
+  if (order && order.stage === "active") {
+    order.progress += amount;
+    if (order.progress >= order.goal) {
+      state.money += order.reward;
+      state.lifetime += order.reward;
+      state.totalEarned += order.reward;
+      events.push({ kind: "order_done", reward: order.reward });
+      state.order = null;
+      state.orderT = C.ORDER_INTERVAL_MIN_S + nextRand(state) * (C.ORDER_INTERVAL_MAX_S - C.ORDER_INTERVAL_MIN_S);
+    }
+  }
   bumpMission(state, "earn", amount, events);
+}
+
+/** Tirada de descubrimiento de especie (zona actual, no descubiertas). */
+function rollSpecies(state: GameState, events: SimEvent[]): void {
+  for (const sp of C.SPECIES) {
+    if (sp.zone !== state.zonesUnlocked) continue;
+    if (state.discovered.includes(sp.id)) continue;
+    if (nextRand(state) < C.SPECIES_CHANCE[sp.rarity]) {
+      state.discovered.push(sp.id);
+      events.push({ kind: "species_found", id: sp.id });
+      return; // máx. una por cobro
+    }
+  }
 }
 
 function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events: SimEvent[]): number {
@@ -52,6 +79,7 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
   events.push({ kind: "collect", boatId: boat.id, amount, auto });
   events.push({ kind: "depart", boatId: boat.id });
   bumpMission(state, "collect", 1, events);
+  rollSpecies(state, events);
   return amount;
 }
 
@@ -109,7 +137,32 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
   // Eventos aleatorios --------------------------------------------------------
   tickEvent(state, dt, events);
 
+  // Pedidos de la lonja ---------------------------------------------------------
+  tickOrder(state, dt, events);
+
   return events;
+}
+
+function tickOrder(state: GameState, dt: number, events: SimEvent[]): void {
+  const order = state.order;
+  if (order) {
+    order.remaining -= dt;
+    if (order.remaining <= 0) {
+      // Oferta no aceptada o tiempo agotado: el cliente se va, sin castigo.
+      events.push({ kind: "order_gone" });
+      state.order = null;
+      state.orderT = C.ORDER_INTERVAL_MIN_S + nextRand(state) * (C.ORDER_INTERVAL_MAX_S - C.ORDER_INTERVAL_MIN_S);
+    }
+    return;
+  }
+  if (state.playTime < C.ORDER_WARMUP_S) return;
+  state.orderT -= dt;
+  if (state.orderT > 0) return;
+  state.orderT = 0;
+  const goal = Math.max(C.ORDER_GOAL_MIN, Math.ceil(incomeRate(state) * C.ORDER_GOAL_SECONDS));
+  const reward = Math.ceil(goal * C.ORDER_REWARD_FACTOR);
+  state.order = { stage: "offer", goal, progress: 0, remaining: C.ORDER_OFFER_S, reward };
+  events.push({ kind: "order_offer", goal, reward });
 }
 
 function tickEvent(state: GameState, dt: number, events: SimEvent[]): void {
@@ -256,6 +309,25 @@ export function tapShoal(state: GameState, events: SimEvent[] = []): ActionResul
   return { ok: true, gained };
 }
 
+/** Aceptar el pedido de la lonja durante la oferta. */
+export function acceptOrder(state: GameState): ActionResult {
+  const order = state.order;
+  if (!order || order.stage !== "offer") return { ok: false, reason: "no_offer" };
+  order.stage = "active";
+  order.remaining = C.ORDER_TIME_S;
+  order.progress = 0;
+  return { ok: true };
+}
+
+/** Rechazar el pedido: el cliente se va y el siguiente llegará más tarde. */
+export function declineOrder(state: GameState): ActionResult {
+  const order = state.order;
+  if (!order || order.stage !== "offer") return { ok: false, reason: "no_offer" };
+  state.order = null;
+  state.orderT = C.ORDER_INTERVAL_MIN_S + nextRand(state) * (C.ORDER_INTERVAL_MAX_S - C.ORDER_INTERVAL_MIN_S);
+  return { ok: true };
+}
+
 /** Decisión de tormenta durante la ventana de aviso. */
 export function resolveStorm(state: GameState, choice: "shelter" | "risk"): ActionResult {
   const ev = state.event;
@@ -287,6 +359,9 @@ export function doPrestige(state: GameState, now: number): ActionResult {
   state.missionsDone = 0;
   state.event = null;
   state.eventT = C.EVENT_WARMUP_S;
+  state.order = null;
+  state.orderT = C.ORDER_WARMUP_S;
+  // state.discovered NO se resetea: la pescadoteca es permanente.
   state.playTime = 0;
   state.lastSeen = now;
   rollMissions(state);

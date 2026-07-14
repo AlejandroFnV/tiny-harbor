@@ -15,6 +15,7 @@ import {
   BOATS,
   BOLLARD,
   BUBBLE,
+  CLIENT,
   CLOUDS,
   CRATE_PILE,
   CRATES,
@@ -76,6 +77,9 @@ export class Renderer {
   private glints: { x: number; y: number; ph: number }[] = [];
   private boatRects = new Map<number, { x: number; y: number; r: number }>();
   private shoalPos = { x: 0, y: 0 };
+  private lastTownKey = "";
+  private lastTownCount = 0;
+  private clientVisible = false;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -251,7 +255,7 @@ export class Renderer {
 
     g.clearRect(0, 0, this.aw, this.ah);
     this.drawSky(g, pal, step, dayT, night, storm);
-    this.drawShore(g, pal, step, night, dt); // pueblo en la orilla del fondo
+    this.drawShore(g, state, pal, step, night, dt); // pueblo en la orilla del fondo
     this.drawSea(g, pal, storm);
     this.updateGulls(dt, night, storm, g);
 
@@ -263,6 +267,7 @@ export class Renderer {
     for (const { boat, pos } of order) this.drawBoat(g, boat, pos, step, pal);
 
     this.drawFrenzy(g, state, dt, pal);
+    this.clientVisible = state.order !== null;
     this.drawPier(g, pal, step, night);
 
     if (storm > 0) this.drawStorm(g, dt, storm, stormActive, pal);
@@ -526,9 +531,10 @@ export class Renderer {
     }
   }
 
-  // --- orilla del fondo: el pueblo en el horizonte --------------------------------
+  // --- orilla del fondo: el pueblo crece con tu progreso ---------------------------
   private drawShore(
     g: CanvasRenderingContext2D,
+    state: GameState,
     pal: PixelPalette,
     step: number,
     night: number,
@@ -543,33 +549,63 @@ export class Renderer {
     g.fillRect(0, hy - 1, this.aw, 1);
     g.globalAlpha = 1;
 
-    // Edificios apoyados en la orilla (base = hy - 2).
+    // Hitos de la vuelta → el pueblo se construye delante de tus ojos.
+    const hasMarket = state.boats.length >= 3 || state.dockLevel >= 1;
+    const hasHouse2 = state.managerLvl >= 1;
+    const hasWarehouse = state.zonesUnlocked >= 2;
+    const hasHouse3 = state.zonesUnlocked >= 3 || state.boats.length >= 8;
+
     const base = hy - 2;
     const spots: { spr: Sprite; x: number }[] = [];
     spots.push({ spr: LIGHTHOUSE, x: Math.round(this.aw * 0.05) });
     spots.push({ spr: HOUSE, x: Math.round(this.aw * 0.05) + LIGHTHOUSE.w + 3 });
     const whX = this.aw - WAREHOUSE.w - Math.round(this.aw * 0.04);
-    spots.push({ spr: WAREHOUSE, x: whX });
     const mkX = whX - MARKET.w - 5;
-    spots.push({ spr: MARKET, x: mkX });
-    if (this.aw > 260) {
-      // Desktop: más caserío en el centro.
-      spots.push({ spr: HOUSE, x: mkX - HOUSE.w - 8 });
-      spots.push({ spr: HOUSE, x: Math.round(this.aw * 0.34) });
-    }
+    if (hasWarehouse) spots.push({ spr: WAREHOUSE, x: whX });
+    if (hasMarket) spots.push({ spr: MARKET, x: hasWarehouse ? mkX : whX + WAREHOUSE.w - MARKET.w });
+    if (hasHouse2 && this.aw > 200) spots.push({ spr: HOUSE, x: Math.round(this.aw * 0.34) });
+    if (hasHouse3 && this.aw > 260) spots.push({ spr: HOUSE, x: mkX - HOUSE.w - 8 });
     for (const b of spots) g.drawImage(raster(b.spr, step), b.x, base - b.spr.h + 1);
 
-    // Humo de la chimenea del almacén (en coords de pantalla para las partículas).
-    this.smokeTimer -= dt;
-    if (this.smokeTimer <= 0) {
-      this.particles.smoke((whX + WAREHOUSE.w * 0.5) * this.px, (base - WAREHOUSE.h - 1) * this.px);
-      this.smokeTimer = 0.7 + Math.random() * 0.7;
+    // Obra nueva: destello la primera vez que aparece un edificio.
+    const townKey = `${spots.length}:${state.prestiges}`;
+    if (townKey !== this.lastTownKey) {
+      if (this.lastTownKey !== "" && spots.length > this.lastTownCount) {
+        const nb = spots[spots.length - 1];
+        this.particles.spark((nb.x + nb.spr.w / 2) * this.px, (base - nb.spr.h / 2) * this.px, 14);
+      }
+      this.lastTownKey = townKey;
+      this.lastTownCount = spots.length;
     }
 
-    // Haz del faro barriendo el mar de noche + linterna parpadeando.
+    // Guirnalda de luces entre el faro y el pueblo: recuerdo permanente del prestigio.
+    if (state.reputation > 0) {
+      const x0 = Math.round(this.aw * 0.05) + LIGHTHOUSE.w;
+      const x1 = hasWarehouse || hasMarket ? (hasMarket ? mkX : whX) + 3 : this.aw - 20;
+      for (let x = x0; x < x1; x += 3) {
+        const tt = (x - x0) / Math.max(1, x1 - x0);
+        const sag = Math.round(Math.sin(tt * Math.PI * 3) * 2 + 2);
+        const on = night > 0.25 ? Math.sin(this.t * 4 + x) > -0.4 : true;
+        g.fillStyle = night > 0.25 && on ? pal.glassLit : pal.coral;
+        g.globalAlpha = night > 0.25 ? 0.95 : 0.8;
+        g.fillRect(x, base - LIGHTHOUSE.h + 6 + sag, 1, 1);
+      }
+      g.globalAlpha = 1;
+    }
+
+    // Humo de la chimenea del almacén (en coords de pantalla para las partículas).
+    if (hasWarehouse) {
+      this.smokeTimer -= dt;
+      if (this.smokeTimer <= 0) {
+        this.particles.smoke((whX + WAREHOUSE.w * 0.5) * this.px, (base - WAREHOUSE.h - 1) * this.px);
+        this.smokeTimer = 0.7 + Math.random() * 0.7;
+      }
+    }
+
+    // Haz del faro barriendo el MAR de noche (siempre hacia abajo) + linterna.
     const lhX = Math.round(this.aw * 0.05);
     if (night > 0.3) {
-      const ang = 0.35 + Math.sin(this.t * 0.35) * 0.55; // barre de un lado a otro
+      const ang = 0.18 + ((Math.sin(this.t * 0.35) + 1) / 2) * 0.5; // [0.18, 0.68] rad: sobre el agua
       const lx = lhX + LIGHTHOUSE.w / 2;
       const ly = base - LIGHTHOUSE.h + 4;
       g.save();
@@ -641,6 +677,18 @@ export class Renderer {
     for (const p of props) {
       if (this.aw < 200 && (p.fx === 0.36 || p.fx === 0.88)) continue; // móvil: menos
       g.drawImage(raster(p.spr, step), Math.round(this.aw * p.fx), y - p.spr.h + 1);
+    }
+
+    // Cliente de la lonja esperando su pedido (balanceo sutil).
+    if (this.clientVisible) {
+      const cx = Math.round(this.aw * 0.68);
+      const bob = Math.sin(this.t * 2.2) > 0.6 ? -1 : 0;
+      g.drawImage(raster(CLIENT, step), cx, y - CLIENT.h + 1 + bob);
+      // Signo de "tengo un encargo" flotando encima.
+      g.fillStyle = pal.must;
+      const by = y - CLIENT.h - 4 + Math.round(Math.sin(this.t * 3) * 1);
+      g.fillRect(cx + 2, by, 2, 2);
+      g.fillRect(cx + 2, by - 3, 2, 2);
     }
 
     // Bolardos + cuerda entre ellos (curva muestreada a píxeles).

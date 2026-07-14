@@ -13,9 +13,11 @@ import * as C from "./sim/config";
 import { applyOffline } from "./sim/offline";
 import { loadFromStorage, saveToStorage, clearStorage } from "./sim/save";
 import {
+  acceptOrder,
   buyBoat,
   collectAll,
   collectBoat,
+  declineOrder,
   doPrestige,
   hireManager,
   resolveStorm,
@@ -42,6 +44,7 @@ const renderer = new Renderer(canvas);
 renderer.resize();
 const audio = new AudioEngine();
 audio.setMuted(state.settings.muted);
+audio.setMusic(state.settings.music);
 
 let saveFailWarned = false;
 function persist(): void {
@@ -54,15 +57,39 @@ function persist(): void {
 }
 
 // --------------------------------------------------------------------------- acciones
+const RARITY_TEXT = { comun: "", rara: " (¡rara!)", epica: " (¡¡ÉPICA!!)" } as const;
+
 function handleEvents(events: SimEvent[]): void {
   if (events.length === 0) return;
   renderer.onSimEvents(events, state);
   for (const ev of events) {
-    if (ev.kind === "mission_done") {
-      ui.toast(`Misión cumplida: ${ev.text} (+${Math.round(ev.reward)})`);
-      audio.play("mission");
-    } else if (ev.kind === "event_start") {
-      audio.play(ev.event === "storm" ? "storm" : "event");
+    switch (ev.kind) {
+      case "mission_done":
+        ui.toast(`Misión cumplida: ${ev.text} (+${Math.round(ev.reward)})`);
+        audio.play("mission");
+        break;
+      case "event_start":
+        audio.play(ev.event === "storm" ? "storm" : "event");
+        break;
+      case "order_offer":
+        audio.play("event");
+        break;
+      case "order_done":
+        ui.toast(`Pedido entregado. Bono +${Math.round(ev.reward)}.`);
+        audio.play("chest");
+        renderer.particles.confetti(window.innerWidth * 0.68, window.innerHeight * 0.72, 20);
+        break;
+      case "species_found": {
+        const sp = C.SPECIES.find((x) => x.id === ev.id);
+        if (sp) {
+          ui.toast(`Nueva especie: ${sp.name}${RARITY_TEXT[sp.rarity]} · pescadoteca +1% ingresos`);
+          audio.play("mission");
+          renderer.particles.spark(window.innerWidth / 2, window.innerHeight * 0.5, 16, "#8fbfae");
+        }
+        break;
+      }
+      default:
+        break;
     }
   }
 }
@@ -144,11 +171,26 @@ const actions = {
     if (r.ok) audio.play("collect");
     handleEvents(events);
   },
+  acceptOrder() {
+    if (acceptOrder(state).ok) {
+      audio.play("ui");
+      ui.toast("Pedido aceptado: ¡a pescar!");
+    }
+  },
+  declineOrder() {
+    if (declineOrder(state).ok) audio.play("ui");
+  },
   toggleMute(): boolean {
     state.settings.muted = !state.settings.muted;
     audio.setMuted(state.settings.muted);
     persist();
     return state.settings.muted;
+  },
+  toggleMusic(): boolean {
+    state.settings.music = !state.settings.music;
+    audio.setMusic(state.settings.music);
+    persist();
+    return state.settings.music;
   },
   resetGame() {
     clearStorage();
@@ -232,6 +274,7 @@ let last = performance.now();
 let saveT = 0;
 let uiT = 0;
 let timeScale = 1; // solo dev (?dev=1)
+let wasNight = false;
 
 function frame(now: number): void {
   let dt = (now - last) / 1000;
@@ -260,6 +303,14 @@ function frame(now: number): void {
   renderer.render(state, Math.min(dt, 0.1) / timeScale + (timeScale > 1 ? 0.016 : 0));
   ui.update();
   tutorial.update();
+
+  // Campana de puerto al cruzar amanecer/anochecer.
+  const dayT = (state.playTime % C.DAY_CYCLE_S) / C.DAY_CYCLE_S;
+  const isNight = dayT >= 0.58 && dayT < 0.95;
+  if (isNight !== wasNight) {
+    wasNight = isNight;
+    audio.bell();
+  }
 
   uiT += dt;
   if (uiT >= 0.25) {
@@ -297,6 +348,16 @@ window.setInterval(() => {
   }
   // Sin render ni sonido: la pestaña no se ve. Los eventos visuales se descartan.
 }, 1000);
+
+// --------------------------------------------------------------------------- PWA
+// Service worker solo en producción (en dev rompería el HMR de Vite).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {
+      /* sin SW: el juego funciona igual, solo pierde el modo offline instalado */
+    });
+  });
+}
 
 // --------------------------------------------------------------------------- dev
 // ?dev=1 → herramientas de playtest (aceleración honesta del reloj de la sim).

@@ -35,10 +35,13 @@ export function newGame(now: number, seed = 1234567): GameState {
     missionsDone: 0,
     event: null,
     eventT: C.EVENT_WARMUP_S,
+    order: null,
+    orderT: C.ORDER_WARMUP_S,
+    discovered: [],
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
-    settings: { muted: false },
+    settings: { muted: false, music: true },
     stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0 },
     rngSeed: seed >>> 0,
   };
@@ -90,8 +93,29 @@ export function sanitize(state: GameState): GameState {
   }
   if (state.boats.length === 0) state.boats.push(newBoat(state, 0));
 
-  if (!state.settings || typeof state.settings !== "object") state.settings = { muted: false };
+  if (!state.settings || typeof state.settings !== "object") state.settings = { muted: false, music: true };
   state.settings.muted = state.settings.muted === true;
+  state.settings.music = state.settings.music !== false;
+
+  // Pescadoteca: solo ids conocidas, sin duplicados.
+  if (!Array.isArray(state.discovered)) state.discovered = [];
+  const known = new Set(C.SPECIES.map((s) => s.id));
+  state.discovered = [...new Set(state.discovered)].filter((id) => known.has(id));
+
+  // Pedido de la lonja.
+  state.orderT = num(state.orderT, C.ORDER_WARMUP_S, 0, 3600);
+  if (state.order && typeof state.order === "object") {
+    const o = state.order;
+    if (o.stage !== "offer" && o.stage !== "active") state.order = null;
+    else {
+      o.goal = num(o.goal, C.ORDER_GOAL_MIN, 1);
+      o.progress = num(o.progress, 0, 0);
+      o.remaining = num(o.remaining, 0, 0, 600);
+      o.reward = num(o.reward, 0, 0);
+    }
+  } else {
+    state.order = null;
+  }
   if (!state.stats || typeof state.stats !== "object") {
     state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0 };
   }
