@@ -34,6 +34,7 @@ import {
   zoneCost,
 } from "../sim/economy";
 import { formatDuration, formatMoney } from "../sim/format";
+import { dailyProgress } from "../sim/sim";
 import type { OfflineResult } from "../sim/offline";
 import type { GameState } from "../sim/types";
 import { boatThumbURL, skipperPortraitURL, speciesThumbURL } from "../render/sprites";
@@ -44,6 +45,7 @@ export interface UIActions {
   upgradeDock(): void;
   upgradeLonja(): void;
   startExpedition(defIndex: number): void;
+  paintBoat(boatId: number): void;
   renamePort(name: string): void;
   shareCard(): void;
   hireManager(): void;
@@ -121,6 +123,7 @@ export class UI {
           <div class="rate" id="rate">0/s</div>
           <div class="market-chip" id="market-chip" title="Precio de la lonja: sube y baja solo. Cobra caro."><span id="market-arrow">→</span> lonja <b id="market-val">×1.00</b></div>
           <div class="vigia-chip" id="vigia-chip" hidden title="La Torre del Vigía otea el horizonte"></div>
+          <div class="weather-chip" id="weather-chip" hidden></div>
         </div>
         <div class="top-actions">
           <div class="combo-stamp" id="combo-stamp" hidden><span id="combo-val">×1.0</span><small>RACHA</small></div>
@@ -227,6 +230,7 @@ export class UI {
       case "up-dock": this.act.upgradeDock(); break;
       case "up-lonja": this.act.upgradeLonja(); break;
       case "start-expedition": this.act.startExpedition(Number(el.dataset.exp)); break;
+      case "paint-boat": this.act.paintBoat(id); break;
       case "rename-port": this.showRenameModal(); break;
       case "share-card": this.act.shareCard(); break;
       case "hire-manager": this.act.hireManager(); break;
@@ -345,6 +349,7 @@ export class UI {
         <div class="ups">
           <button class="btn" data-action="up-speed" data-id="${b.id}">Velocidad ${b.speedLvl >= C.SPEED_MAX_LVL ? "MÁX" : `${b.speedLvl + 1}`}<span class="sub" data-cost-label></span></button>
           <button class="btn" data-action="up-cap" data-id="${b.id}">Redes ${b.capLvl >= C.CAP_MAX_LVL ? "MÁX" : `${b.capLvl + 1}`}<span class="sub" data-cost-label></span></button>
+          <button class="btn paint-btn" data-action="paint-boat" data-id="${b.id}" title="Pinta el casco" aria-label="Pintar barco"><span class="swatch" style="background:${b.paint > 0 ? C.PAINTS[b.paint] : C.BOAT_TIERS[b.tier].hull}"></span></button>
         </div>
       </div>`;
     }
@@ -751,6 +756,17 @@ export class UI {
       document.getElementById("rep-val")!.textContent = `×${prestigeMult(s).toFixed(2)}`;
     }
 
+    // Clima del día (solo si no es despejado).
+    const wChip = document.getElementById("weather-chip")!;
+    const w = C.WEATHERS[Math.min(s.weather, C.WEATHERS.length - 1)];
+    const showW = s.weather !== 0;
+    if (wChip.hidden === showW) wChip.hidden = !showW;
+    if (showW && wChip.dataset.w !== w.id) {
+      wChip.dataset.w = w.id;
+      wChip.textContent = w.name.toLowerCase();
+      wChip.title = w.desc;
+    }
+
     // El vigía canta lo que viene (chip bajo el dinero).
     const vChip = document.getElementById("vigia-chip")!;
     if (vChip.hidden === s.vigia) vChip.hidden = !s.vigia;
@@ -800,10 +816,20 @@ export class UI {
     if (panel.hidden === this.missionsPanelOpen) panel.hidden = !this.missionsPanelOpen;
     if (!this.missionsPanelOpen) return;
 
-    const sig = live.map((m) => `${m.id}:${Math.floor(m.progress)}`).join("|");
+    const d = s.daily;
+    const dDef = d ? C.DAILIES[d.def] : null;
+    const dProg = d ? dailyProgress(s) : 0;
+    const sig = `${d ? `${d.def}.${dProg}.${d.done}` : ""}|` + live.map((m) => `${m.id}:${Math.floor(m.progress)}`).join("|");
     if (!force && sig === this.missionSig) return;
     this.missionSig = sig;
-    panel.innerHTML = live
+    // El desafío del día preside el panel (el mismo para todos los puertos del mundo).
+    const dailyHtml = d && dDef
+      ? `<div class="mission-card daily ${d.done ? "done" : ""}">
+          <div class="mtext"><span>☀ DESAFÍO DEL DÍA: ${dDef.text}</span><span class="reward">${d.done ? "HECHO" : `${dProg}/${dDef.target}`}</span></div>
+          <div class="bar"><i style="width:${Math.min(100, (dProg / dDef.target) * 100)}%"></i></div>
+        </div>`
+      : "";
+    panel.innerHTML = dailyHtml + live
       .map(
         (m) => `<div class="mission-card">
           <div class="mtext"><span>${m.text}</span><span class="reward">+${formatMoney(m.reward)}</span></div>

@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -186,6 +186,58 @@ export const COMBO_MAX = 15;
 /** Probabilidad por cobro MANUAL de que la carga sea dorada (×GOLDEN_MULT). */
 export const GOLDEN_CHANCE = 0.03;
 export const GOLDEN_MULT = 3;
+
+// ---------------------------------------------------------------------------
+// El clima del día (se sortea con cada amanecer; la tormenta-evento va aparte)
+// ---------------------------------------------------------------------------
+export interface WeatherDef {
+  id: string;
+  name: string;
+  desc: string;
+  /** Pesos de sorteo. */
+  weight: number;
+  /** Multiplicadores suaves. */
+  cargoMult: number;
+  speedMult: number;
+  speciesMult: number;
+}
+
+export const WEATHERS: WeatherDef[] = [
+  { id: "despejado", name: "Despejado", desc: "Un día de postal", weight: 40, cargoMult: 1, speedMult: 1, speciesMult: 1 },
+  { id: "niebla", name: "Niebla", desc: "Se navega despacio… y lo raro se acerca a mirar", weight: 20, cargoMult: 1, speedMult: 0.85, speciesMult: 1.5 },
+  { id: "llovizna", name: "Llovizna", desc: "Con lluvia fina, los peces pican", weight: 20, cargoMult: 1.1, speedMult: 1, speciesMult: 1 },
+  { id: "marejada", name: "Marejada", desc: "Mar gruesa: redes llenas, ritmo lento", weight: 20, cargoMult: 1.25, speedMult: 0.85, speciesMult: 1 },
+];
+
+// ---------------------------------------------------------------------------
+// El desafío del día (el MISMO para todos los jugadores: se sortea con la fecha)
+// ---------------------------------------------------------------------------
+export interface DailyDef {
+  id: string;
+  /** Stat de GameState.stats que mide el progreso (por delta desde que se asigna). */
+  stat: string;
+  target: number;
+  text: string;
+  /** true → el objetivo es ALCANZAR el valor (no acumular delta). */
+  absolute?: boolean;
+}
+
+export const DAILIES: DailyDef[] = [
+  { id: "cargas", stat: "collects", target: 40, text: "Cobra 40 cargas" },
+  { id: "doradas", stat: "goldenCatches", target: 3, text: "Pesca 3 capturas doradas" },
+  { id: "pedidos", stat: "ordersDone", target: 2, text: "Entrega 2 pedidos de la lonja" },
+  { id: "cofres", stat: "driftsTapped", target: 2, text: "Pesca 2 cofres a la deriva" },
+  { id: "racha", stat: "bestCombo", target: 8, text: "Encadena una racha de 8", absolute: true },
+  { id: "mejoras", stat: "upgrades", target: 12, text: "Mejora barcos 12 veces" },
+];
+/** Recompensa = max(suelo, income × segundos). */
+export const DAILY_REWARD_SECONDS = 1200;
+export const DAILY_REWARD_MIN = 2_000;
+
+// ---------------------------------------------------------------------------
+// Pintura de barcos (personalización pura; 0 = color de fábrica del tier)
+// ---------------------------------------------------------------------------
+export const PAINTS = ["", "#c94f4f", "#4f7fc9", "#4fa06a", "#8a5aa6", "#e0a33e", "#3b3f4a"];
 
 // ---------------------------------------------------------------------------
 // Mercado de la lonja (precio vivo) — el timing de venta importa
@@ -577,6 +629,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "fiel7", name: "Sal en las venas", desc: "Vuelve al puerto 7 días seguidos" },
   { id: "alba1", name: "El amanecer", desc: "Bota El Alba, el barco de leyenda" },
   { id: "tratos3", name: "Mano izquierda", desc: "Vende 3 puertos a compradores especiales" },
+  { id: "meteorologo", name: "Piel de gaviota", desc: "Cobra pesca bajo los 4 climas" },
+  { id: "desafios7", name: "Palabra de puerto", desc: "Completa 7 desafíos del día" },
 ];
 
 // ---------------------------------------------------------------------------

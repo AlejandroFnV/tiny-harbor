@@ -114,6 +114,7 @@ describe("expediciones", () => {
   it("zarpa el barco más valioso, no pesca mientras, y vuelve con botín", () => {
     const s = withBoats(3);
     s.market.mult = 1;
+    s.weather = 0;
     const best = s.boats.reduce((a, b) => (cargoValue(s, b) > cargoValue(s, a) ? b : a));
     const rateBefore = incomeRate(s);
     const events: SimEvent[] = [];
@@ -129,7 +130,8 @@ describe("expediciones", () => {
     expect(done!.amount).toBeGreaterThan(0);
     expect(s.money).toBeGreaterThanOrEqual(done!.amount * 0.999);
     expect(s.stats.expeditionsDone).toBe(1);
-    s.market.mult = 1; // neutraliza la deriva del mercado durante el tick largo
+    s.market.mult = 1; // neutraliza mercado y clima, que derivan durante el tick largo
+    s.weather = 0;
     // El barco vuelve a contar (≥: el logro "Mar adentro" añade +2% al completar).
     expect(incomeRate(s)).toBeGreaterThanOrEqual(rateBefore);
     expect(incomeRate(s)).toBeLessThan(rateBefore * 1.1);

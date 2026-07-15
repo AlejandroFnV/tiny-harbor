@@ -14,6 +14,8 @@ export interface Boat {
   id: number;
   /** Índice en BOAT_TIERS. */
   tier: number;
+  /** Pintura del casco (índice en PAINTS; 0 = color de fábrica). */
+  paint: number;
   speedLvl: number;
   capLvl: number;
   phase: BoatPhase;
@@ -152,6 +154,12 @@ export interface GameState {
   /** Torre del Vigía comprada esta vuelta (anticipa eventos y cofres). */
   vigia: boolean;
 
+  /** Clima del día (índice en WEATHERS); se sortea con cada amanecer. */
+  weather: number;
+
+  /** Desafío del día (el mismo para todos): fecha, tipo y línea base del stat. */
+  daily: { day: number; def: number; baseline: number; done: boolean } | null;
+
   /** Paquete del pescador: reloj de pared del último regalo y racha de días. */
   gift: { lastAt: number; streak: number };
 
@@ -177,6 +185,9 @@ export interface GameState {
     soldHigh: number;
     krakensRepelled: number;
     specialSales: number;
+    /** Bitmask de climas bajo los que se ha cobrado pesca (logro meteorólogo). */
+    weathersFished: number;
+    dailiesDone: number;
     /** Récords para la bitácora. */
     bestLifetime: number;
     bestRepGain: number;
@@ -207,4 +218,6 @@ export type SimEvent =
   | { kind: "relic_found"; id: string }
   | { kind: "expedition_done"; boatId: number; amount: number }
   | { kind: "kraken_repelled"; amount: number }
-  | { kind: "kraken_escaped"; lost: number };
+  | { kind: "kraken_escaped"; lost: number }
+  | { kind: "weather_change"; weather: number }
+  | { kind: "daily_done"; reward: number; text: string };

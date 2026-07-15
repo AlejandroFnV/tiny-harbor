@@ -44,6 +44,11 @@ export function marketMult(state: GameState): number {
   return state.market.mult;
 }
 
+/** Clima del día (definición). */
+export function weather(state: GameState): C.WeatherDef {
+  return C.WEATHERS[Math.min(state.weather, C.WEATHERS.length - 1)];
+}
+
 const LEGEND_IDS = new Set(C.SPECIES.filter((s) => s.rarity === "leyenda").map((s) => s.id));
 
 /** El Alba se desbloquea al reunir las 4 leyendas. */
@@ -139,6 +144,7 @@ export function cycleTime(state: GameState, boat: Boat): number {
   if (boat.skipper?.trait === "rapido") speed *= 1 + C.TRAIT_SPEED_BONUS;
   speed *= 1 + C.LEGACY_ESCUELA_SPEED * state.legacy.escuela;
   if (hasRelic(state, "brujula")) speed *= 1 + C.RELIC_SPEED;
+  speed *= weather(state).speedMult;
   return (def.cycle * zone.distMult) / speed;
 }
 
@@ -149,7 +155,7 @@ export function cargoValue(state: GameState, boat: Boat): number {
   let v =
     def.baseCargo * (1 + C.CAP_BONUS * boat.capLvl) * zone.valueMult *
     prestigeMult(state) * speciesMult(state) * achievementMult(state) * lonjaMult(state) *
-    relicIncomeMult(state) * marketMult(state);
+    relicIncomeMult(state) * marketMult(state) * weather(state).cargoMult;
   if (boat.skipper?.trait === "redes") v *= 1 + C.TRAIT_CARGO_BONUS;
   v *= 1 + C.LEGACY_ASTILLERO_CARGO * state.legacy.astillero;
   return v;
@@ -161,6 +167,7 @@ export function speciesChanceMult(state: GameState, boat: Boat): number {
   if (boat.skipper?.trait === "ojo") m *= C.TRAIT_SPECIES_MULT;
   if (hasRelic(state, "catalejo")) m *= 1 + C.RELIC_SPECIES;
   if (boat.tier === C.ALBA_TIER) m *= C.ALBA_SPECIES_MULT; // El Alba atrae a los peces
+  m *= weather(state).speciesMult; // la niebla acerca lo raro
   return m;
 }
 

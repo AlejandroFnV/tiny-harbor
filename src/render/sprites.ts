@@ -687,12 +687,14 @@ const rasterCache = new Map<string, HTMLCanvasElement>();
 export function raster(
   spr: Sprite,
   nightStep: number,
-  opts: { hullTier?: number; flip?: boolean } = {},
+  opts: { hullTier?: number; flip?: boolean; paint?: string } = {},
 ): HTMLCanvasElement {
-  const key = `${spr.id}:${nightStep}:${opts.hullTier ?? ""}:${opts.flip ? 1 : 0}`;
+  const key = `${spr.id}:${nightStep}:${opts.hullTier ?? ""}:${opts.flip ? 1 : 0}:${opts.paint ?? ""}`;
   const hit = rasterCache.get(key);
   if (hit) return hit;
   const pal = palette(nightStep);
+  // Pintura de casco: color elegido por el jugador, con el mismo apagado nocturno.
+  const paintCol = opts.paint ? mix(opts.paint, "#463328", (nightStep / NIGHT_STEPS) * 0.65) : null;
   const cv = document.createElement("canvas");
   cv.width = spr.w;
   cv.height = spr.h;
@@ -704,7 +706,14 @@ export function raster(
       if (ch === "." || ch === " ") continue;
       let colKey = spr.legend[ch];
       if (!colKey) continue;
-      if (colKey === "hull") colKey = `hull${opts.hullTier ?? 0}`;
+      if (colKey === "hull") {
+        if (paintCol) {
+          ctx.fillStyle = paintCol;
+          ctx.fillRect(opts.flip ? spr.w - 1 - x : x, y, 1, 1);
+          continue;
+        }
+        colKey = `hull${opts.hullTier ?? 0}`;
+      }
       ctx.fillStyle = pal[colKey] ?? "#f0f;";
       ctx.fillRect(opts.flip ? spr.w - 1 - x : x, y, 1, 1);
     }

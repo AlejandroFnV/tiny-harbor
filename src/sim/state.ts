@@ -8,6 +8,7 @@ export function newBoat(state: GameState, tier: number): Boat {
   return {
     id: state.nextBoatId++,
     tier,
+    paint: 0,
     speedLvl: 0,
     capLvl: 0,
     phase: "out",
@@ -53,12 +54,14 @@ export function newGame(now: number, seed = 1234567): GameState {
     relics: [],
     portName: "",
     vigia: false,
+    weather: 0,
+    daily: null,
     gift: { lastAt: 0, streak: 0 },
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
     settings: { muted: false, music: true },
-    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
+    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
     rngSeed: seed >>> 0,
   };
   // Empiezas con un bote heredado, ya faenando.
@@ -104,6 +107,7 @@ export function sanitize(state: GameState): GameState {
   state.boats = state.boats.filter((b) => b && typeof b === "object").slice(0, C.MAX_BOATS);
   for (const b of state.boats) {
     b.tier = Math.floor(num(b.tier, 0, 0, C.BOAT_TIERS.length - 1));
+    b.paint = Math.floor(num(b.paint, 0, 0, C.PAINTS.length - 1));
     b.speedLvl = Math.floor(num(b.speedLvl, 0, 0, C.SPEED_MAX_LVL));
     b.capLvl = Math.floor(num(b.capLvl, 0, 0, C.CAP_MAX_LVL));
     b.phaseT = num(b.phaseT, 0, 0, 36000);
@@ -178,9 +182,19 @@ export function sanitize(state: GameState): GameState {
   const knownRelics = new Set(C.RELICS.map((r) => r.id));
   state.relics = [...new Set(state.relics)].filter((id) => knownRelics.has(id));
 
-  // Nombre del puerto, vigía y paquete del pescador.
+  // Nombre del puerto, vigía, clima, desafío y paquete del pescador.
   state.portName = typeof state.portName === "string" ? state.portName.slice(0, C.PORT_NAME_MAX) : "";
   state.vigia = state.vigia === true;
+  state.weather = Math.floor(num(state.weather, 0, 0, C.WEATHERS.length - 1));
+  if (state.daily && typeof state.daily === "object") {
+    const d = state.daily;
+    d.day = Math.floor(num(d.day, 0, 0));
+    d.def = Math.floor(num(d.def, 0, 0, C.DAILIES.length - 1));
+    d.baseline = num(d.baseline, 0, 0);
+    d.done = d.done === true;
+  } else {
+    state.daily = null;
+  }
   if (!state.gift || typeof state.gift !== "object") state.gift = { lastAt: 0, streak: 0 };
   state.gift.lastAt = num(state.gift.lastAt, 0);
   state.gift.streak = Math.floor(num(state.gift.streak, 0, 0, 100000));
@@ -210,7 +224,7 @@ export function sanitize(state: GameState): GameState {
     state.order = null;
   }
   if (!state.stats || typeof state.stats !== "object") {
-    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 };
+    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 };
   }
   state.stats.collects = Math.floor(num(state.stats.collects, 0));
   state.stats.boatsBought = Math.floor(num(state.stats.boatsBought, 0));
@@ -226,6 +240,8 @@ export function sanitize(state: GameState): GameState {
   state.stats.soldHigh = Math.floor(num(state.stats.soldHigh, 0));
   state.stats.krakensRepelled = Math.floor(num(state.stats.krakensRepelled, 0));
   state.stats.specialSales = Math.floor(num(state.stats.specialSales, 0));
+  state.stats.weathersFished = Math.floor(num(state.stats.weathersFished, 0, 0, (1 << C.WEATHERS.length) - 1));
+  state.stats.dailiesDone = Math.floor(num(state.stats.dailiesDone, 0));
   state.stats.bestLifetime = num(state.stats.bestLifetime, state.lifetime);
   state.stats.bestRepGain = Math.floor(num(state.stats.bestRepGain, 0));
   state.stats.bestGiftStreak = Math.floor(num(state.stats.bestGiftStreak, state.gift.streak));

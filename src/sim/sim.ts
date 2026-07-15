@@ -109,6 +109,7 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
   if (!auto) {
     amount *= comboMult(state);
     if (state.market.mult >= C.MARKET_HIGH) state.stats.soldHigh++;
+    state.stats.weathersFished |= 1 << state.weather; // logro meteorólogo
     if (nextRand(state) < C.GOLDEN_CHANCE) {
       amount *= C.GOLDEN_MULT;
       state.stats.goldenCatches++;
@@ -131,7 +132,25 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
 /** Avanza la simulación dt segundos. Devuelve eventos para render/audio. */
 export function tick(state: GameState, dt: number, events: SimEvent[] = []): SimEvent[] {
   if (!Number.isFinite(dt) || dt <= 0) return events;
+  const dayBefore = Math.floor(state.playTime / C.DAY_CYCLE_S);
   state.playTime += dt;
+
+  // Con cada amanecer se sortea el clima del día.
+  if (Math.floor(state.playTime / C.DAY_CYCLE_S) > dayBefore) {
+    const total = C.WEATHERS.reduce((s, w) => s + w.weight, 0);
+    let roll = nextRand(state) * total;
+    for (let i = 0; i < C.WEATHERS.length; i++) {
+      roll -= C.WEATHERS[i].weight;
+      if (roll <= 0) {
+        if (state.weather !== i) events.push({ kind: "weather_change", weather: i });
+        state.weather = i;
+        break;
+      }
+    }
+  }
+
+  // Desafío del día: progreso medido como delta del stat desde la asignación.
+  tickDaily(state, events);
 
   // Racha de cobro manual: caduca si pasan COMBO_WINDOW_S sin cobrar.
   if (state.combo.n > 0) {
@@ -212,6 +231,56 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
   tickAchievements(state, events);
 
   return events;
+}
+
+/** Progreso del desafío del día (0..target) leyendo el stat correspondiente. */
+export function dailyProgress(state: GameState): number {
+  const d = state.daily;
+  if (!d) return 0;
+  const def = C.DAILIES[d.def];
+  const value = (state.stats as unknown as Record<string, number>)[def.stat] ?? 0;
+  return Math.min(def.target, def.absolute ? value : value - d.baseline);
+}
+
+function tickDaily(state: GameState, events: SimEvent[]): void {
+  const d = state.daily;
+  if (!d || d.done) return;
+  const def = C.DAILIES[d.def];
+  if (dailyProgress(state) >= def.target) {
+    d.done = true;
+    state.stats.dailiesDone++;
+    const reward = Math.ceil(Math.max(C.DAILY_REWARD_MIN, incomeRate(state) * C.DAILY_REWARD_SECONDS));
+    gainMoney(state, reward, events);
+    events.push({ kind: "daily_done", reward, text: def.text });
+  }
+}
+
+/**
+ * Asigna el desafío del día si toca (fecha real → el MISMO reto para todo el mundo).
+ * La llama main al abrir/volver, como el regalo diario.
+ */
+export function checkDaily(state: GameState, now: number): boolean {
+  const day = Math.floor(now / 86_400_000);
+  if (state.daily && state.daily.day === day) return false;
+  // Sorteo por fecha (determinista global, sin gastar el RNG de la partida).
+  let seed = (day * 2654435761) >>> 0;
+  seed = (seed + 0x6d2b79f5) >>> 0;
+  let t = seed;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  const def = Math.floor(r * C.DAILIES.length);
+  const stat = (state.stats as unknown as Record<string, number>)[C.DAILIES[def].stat] ?? 0;
+  state.daily = { day, def, baseline: stat, done: false };
+  return true;
+}
+
+/** Cambia la pintura del casco (cicla por PAINTS). */
+export function paintBoat(state: GameState, boatId: number): ActionResult {
+  const boat = state.boats.find((b) => b.id === boatId);
+  if (!boat) return { ok: false, reason: "no_boat" };
+  boat.paint = (boat.paint + 1) % C.PAINTS.length;
+  return { ok: true };
 }
 
 function tickMarket(state: GameState, dt: number): void {
@@ -354,6 +423,8 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   kraken5: (s) => s.stats.krakensRepelled >= 5,
   alba1: (s) => s.boats.some((b) => b.tier === C.ALBA_TIER),
   tratos3: (s) => s.stats.specialSales >= 3,
+  meteorologo: (s) => s.stats.weathersFished === (1 << C.WEATHERS.length) - 1,
+  desafios7: (s) => s.stats.dailiesDone >= 7,
   leyenda1: (s) => s.discovered.some((id) => LEGEND_CONDS[id] !== undefined),
   leyendas4: (s) => Object.keys(LEGEND_CONDS).every((id) => s.discovered.includes(id)),
   fiel7: (s) => s.stats.bestGiftStreak >= 7,

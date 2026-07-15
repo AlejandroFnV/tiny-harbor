@@ -192,8 +192,9 @@ describe("simulación headless 8h (equivalente ×1000: sin render, a toda máqui
     }
     expect(prestigeAt).not.toBeNull();
     const min = prestigeAt! / 60;
-    // Diseño: primera vuelta ~30-45 min. Margen: 20-50.
-    expect(min).toBeGreaterThanOrEqual(20);
+    // Diseño: primera vuelta ~30-45 min para un humano. El bot greedy con días de
+    // clima favorable (v1.7: llovizna/marejada suben la pesca) puede bajar a ~16.
+    expect(min).toBeGreaterThanOrEqual(15);
     expect(min).toBeLessThanOrEqual(50);
   }, 60_000);
 });

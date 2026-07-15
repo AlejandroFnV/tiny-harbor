@@ -19,6 +19,8 @@ import type { GameState } from "./types";
  * v5 → v6: mercado de la lonja, cofres a la deriva, expediciones y reliquias.
  * v6 → v7: kraken, leyendas, regalo diario, nombre del puerto y récords.
  * v7 → v8: compradores del puerto, Torre del Vigía y El Alba.
+ * v8 → v9: el umbral de venta recuerda la última venta (anti re-sell).
+ * v9 → v10: clima del día, desafío diario, pintura de barcos.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -114,6 +116,20 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof stats.specialSales !== "number") stats.specialSales = 0;
     raw.stats = stats;
     raw.version = 8;
+  },
+  9: (raw) => {
+    if (typeof raw.weather !== "number") raw.weather = 0;
+    if (raw.daily === undefined) raw.daily = null;
+    if (Array.isArray(raw.boats)) {
+      for (const b of raw.boats as Record<string, unknown>[]) {
+        if (b && typeof b === "object" && typeof b.paint !== "number") b.paint = 0;
+      }
+    }
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.weathersFished !== "number") stats.weathersFished = 0;
+    if (typeof stats.dailiesDone !== "number") stats.dailiesDone = 0;
+    raw.stats = stats;
+    raw.version = 10;
   },
   8: (raw) => {
     // El umbral pasa a recordar la última venta; para saves viejos usamos el

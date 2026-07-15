@@ -17,6 +17,7 @@ import {
   buyBoat,
   buyLegacy,
   buyVigia,
+  checkDaily,
   claimGift,
   collectAll,
   collectBoat,
@@ -24,6 +25,7 @@ import {
   doPrestige,
   hireManager,
   hireSkipper,
+  paintBoat,
   renamePort,
   resolveStorm,
   startExpedition,
@@ -91,6 +93,16 @@ function handleEvents(events: SimEvent[]): void {
       case "kraken_escaped":
         ui.toast(`El Kraken se sumerge con ${formatMoney(ev.lost)} de tu carga…`);
         audio.play("error");
+        break;
+      case "weather_change": {
+        const w = C.WEATHERS[ev.weather];
+        if (w && ev.weather !== 0) ui.toast(`Amanece con ${w.name.toLowerCase()}: ${w.desc.toLowerCase()}.`);
+        break;
+      }
+      case "daily_done":
+        ui.toast(`Desafío del día cumplido: ${ev.text}. +${formatMoney(ev.reward)}.`);
+        audio.play("chest");
+        renderer.particles.confetti(window.innerWidth / 2, window.innerHeight * 0.3, 30);
         break;
       case "order_offer":
         audio.play("event");
@@ -208,6 +220,13 @@ const actions = {
     } else audio.play("error");
     handleEvents(events);
     ui.renderTab();
+  },
+  paintBoat(boatId: number) {
+    if (paintBoat(state, boatId).ok) {
+      audio.play("ui");
+      persist();
+      ui.renderTab();
+    }
   },
   renamePort(name: string) {
     renamePort(state, name);
@@ -495,13 +514,19 @@ document.addEventListener("visibilitychange", () => {
     audio.resume();
     checkOffline(true);
     checkGift();
+    if (checkDaily(state, Date.now())) persist();
   }
 });
 window.addEventListener("pagehide", persist);
 
-// Al arrancar: cofre si venías de una ausencia, y el paquete del pescador si toca.
+// Al arrancar: cofre si venías de una ausencia, paquete del pescador y desafío del día.
 checkOffline(true);
 checkGift();
+if (checkDaily(state, Date.now())) {
+  const def = C.DAILIES[state.daily!.def];
+  ui.toast(`☀ Desafío del día: ${def.text}. Todo el mundo pesca lo mismo hoy.`);
+  persist();
+}
 
 // --------------------------------------------------------------------------- loop
 let last = performance.now();

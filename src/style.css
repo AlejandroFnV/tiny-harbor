@@ -320,6 +320,39 @@ body {
   border-radius: 3px;
 }
 
+/* Chip del clima. */
+.weather-chip {
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #5a748c;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Botón de pintura del casco. */
+.paint-btn {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+}
+
+.paint-btn .swatch {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  border: 2px solid var(--ink);
+}
+
+/* Desafío del día: preside el panel de misiones. */
+.mission-card.daily {
+  border: 2px solid #b07d18;
+}
+
+.mission-card.daily.done {
+  opacity: 0.75;
+}
+
 /* Chip del vigía (bajo el ticker de la lonja). */
 .vigia-chip {
   margin-top: 1px;

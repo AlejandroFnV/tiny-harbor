@@ -5,7 +5,7 @@
  * perfecto. Solo LEE el GameState. API pública estable para main/ui/tutorial.
  */
 
-import { DAY_CYCLE_S } from "../sim/config";
+import { DAY_CYCLE_S, PAINTS } from "../sim/config";
 import { phaseDuration } from "../sim/sim";
 import type { Boat, GameState, SimEvent } from "../sim/types";
 import { Particles } from "./particles";
@@ -272,11 +272,14 @@ export class Renderer {
     const stormWarn = state.event?.kind === "storm" && state.event.stage === "warning";
     const storm = stormActive ? 1 : stormWarn ? 0.5 : 0;
 
+    const weather = storm > 0 ? 0 : state.weather; // la tormenta manda sobre el clima
+
     g.clearRect(0, 0, this.aw, this.ah);
     this.drawSky(g, pal, step, dayT, night, storm);
     this.drawShore(g, state, pal, step, night, dt); // pueblo en la orilla del fondo
-    this.drawSea(g, pal, storm);
+    this.drawSea(g, pal, storm + (weather === 3 ? 0.5 : 0)); // marejada: mar picada
     this.updateGulls(dt, night, storm, g);
+    this.drawFishSchool(g, dt, pal);
 
     this.drawWhale(g, dt, night);
 
@@ -296,6 +299,7 @@ export class Renderer {
     this.drawPier(g, pal, step, night);
 
     if (storm > 0) this.drawStorm(g, dt, storm, stormActive, pal);
+    if (storm === 0) this.drawWeather(g, weather, pal, dt);
 
     // Blit entero al canvas visible.
     const ctx = this.ctx;
@@ -468,7 +472,8 @@ export class Renderer {
   ): void {
     const spr = BOATS[Math.min(boat.tier, BOATS.length - 1)];
     const flip = boat.phase === "in"; // vuelve mirando a puerto
-    const img = raster(spr, step, { hullTier: boat.tier, flip });
+    const paint = boat.paint > 0 ? PAINTS[boat.paint] : undefined;
+    const img = raster(spr, step, { hullTier: boat.tier, flip, paint });
     const x = pos.x - Math.floor(spr.w / 2);
     const y = pos.y - spr.h + 2; // la quilla se hunde 2px
 
@@ -633,6 +638,64 @@ export class Renderer {
       const a = (i / 18) * Math.PI * 2 + spin;
       g.fillRect(cx + Math.round(Math.cos(a) * rx) - 1, cy + Math.round(Math.sin(a) * ry), 2, 1);
     }
+  }
+
+  // --- clima del día ---------------------------------------------------------------
+  private drawWeather(g: CanvasRenderingContext2D, weather: number, pal: PixelPalette, _dt: number): void {
+    if (weather === 1) {
+      // Niebla: bandas horizontales que respiran sobre el mar y comen el horizonte.
+      const top = this.horizonY - 6;
+      for (let i = 0; i < 5; i++) {
+        const y = top + i * 7 + Math.round(Math.sin(this.t * 0.4 + i) * 2);
+        g.globalAlpha = 0.16 - i * 0.02 + Math.sin(this.t * 0.6 + i * 2) * 0.03;
+        g.fillStyle = pal.foam;
+        g.fillRect(0, y, this.aw, 5);
+      }
+      g.globalAlpha = 1;
+    } else if (weather === 2) {
+      // Llovizna: gotas finas y espaciadas, sin oscurecer el día.
+      g.fillStyle = pal.foam;
+      g.globalAlpha = 0.25;
+      const n = Math.round(this.aw / 18);
+      for (let i = 0; i < n; i++) {
+        const x = (i * 131 + Math.floor(this.t * 60) * 11) % this.aw;
+        const y = (i * 73 + Math.floor(this.t * 110) * 5) % this.ah;
+        g.fillRect(x, y, 1, 2);
+      }
+      g.globalAlpha = 1;
+    }
+    // Marejada (3): se dibuja vía drawSea con más crestas.
+  }
+
+  // --- cardumen ambiental: pececillos cruzando en grupo -------------------------------
+  private school = { x: -20, y: 0, dir: 1, active: false, timer: 25 };
+  private drawFishSchool(g: CanvasRenderingContext2D, dt: number, pal: PixelPalette): void {
+    const s = this.school;
+    if (!s.active) {
+      s.timer -= dt;
+      if (s.timer <= 0) {
+        s.active = true;
+        s.dir = Math.random() < 0.5 ? 1 : -1;
+        s.x = s.dir === 1 ? -16 : this.aw + 16;
+        s.y = this.horizonY + this.seaH * (0.25 + Math.random() * 0.5);
+      }
+      return;
+    }
+    s.x += s.dir * 9 * dt;
+    if (s.x < -24 || s.x > this.aw + 24) {
+      s.active = false;
+      s.timer = 30 + Math.random() * 60;
+      return;
+    }
+    g.fillStyle = pal.ink;
+    g.globalAlpha = 0.35;
+    for (let i = 0; i < 5; i++) {
+      const fx = Math.round(s.x - s.dir * (i * 5 + (i % 2) * 2));
+      const fy = Math.round(s.y + Math.sin(this.t * 3 + i * 1.3) * 2 + (i % 3));
+      g.fillRect(fx, fy, 2, 1);
+      g.fillRect(fx - s.dir, fy, 1, 1);
+    }
+    g.globalAlpha = 1;
   }
 
   // --- ballena ambiental (silueta lejana, puro sabor) ------------------------------
