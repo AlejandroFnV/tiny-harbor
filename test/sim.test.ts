@@ -9,7 +9,9 @@ import {
   tapShoal,
   tick,
   unlockZone,
+  upgradeBoat,
   upgradeDock,
+  upgradeLonja,
 } from "../src/sim/sim";
 import { newGame } from "../src/sim/state";
 import type { SimEvent } from "../src/sim/types";
@@ -133,12 +135,18 @@ describe("misiones", () => {
   it("siempre hay 3 misiones activas y completar paga", () => {
     const s = newGame(0);
     expect(s.missions.filter((m) => !m.done).length).toBe(C.ACTIVE_MISSIONS);
-    // Fuerza completar la misión de cobros si existe; si no, la de earn.
-    s.money = 1e9;
+    // Juega de todo (cobrar, comprar, mejorar…) para que caiga la que caiga, se complete.
     const events: SimEvent[] = [];
     for (let i = 0; i < 60; i++) {
+      s.money = Math.max(s.money, 1e9);
       tick(s, 30, events);
       collectAll(s, events);
+      buyBoat(s, 0, events);
+      upgradeBoat(s, s.boats[0].id, "cap", events);
+      upgradeDock(s, events);
+      hireManager(s, events);
+      upgradeLonja(s, events);
+      unlockZone(s, events);
     }
     expect(s.missionsDone).toBeGreaterThan(0);
     expect(events.some((e) => e.kind === "mission_done")).toBe(true);

@@ -7,7 +7,18 @@ import type { Boat, GameState } from "./types";
 
 export function prestigeMult(state: GameState): number {
   // Sobre la reputación GANADA total: gastar en el legado no baja el multiplicador.
-  return 1 + state.repEarned * C.PRESTIGE_MULT_PER_REP;
+  // Curva ^0.75: los primeros puntos rinden como siempre, la cola no rompe el juego.
+  return 1 + Math.pow(state.repEarned, C.PRESTIGE_MULT_CURVE) * C.PRESTIGE_MULT_PER_REP;
+}
+
+/** Bonus de la lonja ampliada (+15% por nivel; se pierde al vender el puerto). */
+export function lonjaMult(state: GameState): number {
+  return 1 + state.lonjaLvl * C.LONJA_INCOME_BONUS;
+}
+
+/** Bonus de racha de cobro manual (el primer cobro no bonifica). */
+export function comboMult(state: GameState): number {
+  return 1 + Math.max(0, state.combo.n - 1) * C.COMBO_STEP;
 }
 
 /** Bonus permanente de la pescadoteca (+1% por especie descubierta). */
@@ -69,7 +80,7 @@ export function cargoValue(state: GameState, boat: Boat): number {
   const zone = C.ZONES[state.zonesUnlocked];
   let v =
     def.baseCargo * (1 + C.CAP_BONUS * boat.capLvl) * zone.valueMult *
-    prestigeMult(state) * speciesMult(state) * achievementMult(state);
+    prestigeMult(state) * speciesMult(state) * achievementMult(state) * lonjaMult(state);
   if (boat.skipper?.trait === "redes") v *= 1 + C.TRAIT_CARGO_BONUS;
   v *= 1 + C.LEGACY_ASTILLERO_CARGO * state.legacy.astillero;
   return v;
@@ -103,6 +114,10 @@ export function managerCost(state: GameState): number {
   return Math.ceil(C.MANAGER_BASE_COST * Math.pow(C.MANAGER_COST_GROWTH, state.managerLvl));
 }
 
+export function lonjaCost(state: GameState): number {
+  return Math.ceil(C.LONJA_BASE_COST * Math.pow(C.LONJA_COST_GROWTH, state.lonjaLvl));
+}
+
 export function nextZone(state: GameState): number | null {
   const next = state.zonesUnlocked + 1;
   return next < C.ZONES.length ? next : null;
@@ -115,13 +130,18 @@ export function zoneCost(state: GameState): number | null {
 
 // --- Prestigio ------------------------------------------------------------------
 
+/** Umbral de venta de ESTA vuelta: cada puerto vendido pide el triple que el anterior. */
+export function prestigeThreshold(state: GameState): number {
+  return C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, state.prestiges);
+}
+
 export function canPrestige(state: GameState): boolean {
-  return state.lifetime >= C.PRESTIGE_MIN_LIFETIME;
+  return state.lifetime >= prestigeThreshold(state);
 }
 
 export function prestigeGain(state: GameState): number {
   if (!canPrestige(state)) return 0;
-  return Math.floor(Math.sqrt(state.lifetime / C.PRESTIGE_REP_DIVISOR));
+  return Math.floor(Math.cbrt(state.lifetime / C.PRESTIGE_REP_DIVISOR));
 }
 
 // --- Offline ---------------------------------------------------------------------

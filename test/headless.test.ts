@@ -14,6 +14,7 @@ import {
   capUpgradeCost,
   dockCost,
   incomeRate,
+  lonjaCost,
   managerCost,
   speedUpgradeCost,
   zoneCost,
@@ -29,6 +30,7 @@ import {
   unlockZone,
   upgradeBoat,
   upgradeDock,
+  upgradeLonja,
 } from "../src/sim/sim";
 import { newGame, sanitize } from "../src/sim/state";
 import type { GameState } from "../src/sim/types";
@@ -57,7 +59,10 @@ function botAct(s: GameState): boolean {
     return upgradeDock(s).ok;
   }
 
-  // 4. Mejora más barata de la flota.
+  // 4. Lonja: sumidero infinito (comprable si es más barata que la mejor mejora).
+  if (s.money >= lonjaCost(s) && upgradeLonja(s).ok) return true;
+
+  // 5. Mejora más barata de la flota.
   let best: { id: number; what: "speed" | "cap"; cost: number } | null = null;
   for (const b of s.boats) {
     if (b.speedLvl < C.SPEED_MAX_LVL) {
@@ -152,6 +157,25 @@ describe("simulación headless 8h (equivalente ×1000: sin render, a toda máqui
     for (let i = 1; i < buys.length; i++) maxGap = Math.max(maxGap, buys[i] - buys[i - 1]);
     maxGap = Math.max(maxGap, 20 * 60 - lastMoneySpentAt);
     expect(maxGap).toBeLessThanOrEqual(120);
+  }, 60_000);
+
+  it("ANTI-RUNAWAY: tras una vuelta profunda (50B), 10 min de la 2ª vuelta NO desbloquean todo", () => {
+    // El bug de v1.2: sqrt(50B/50k) = 1000 rep → mult ×121 → segunda vuelta trivial
+    // ("en nada de tiempo compré buques factoría y desbloqueé todo el mapa").
+    const s = newGame(0, 123);
+    s.lifetime = 50_000_000_000;
+    s.playTime = 3600;
+    doPrestige(s, 0);
+    expect(s.repEarned).toBeLessThan(150); // con sqrt eran 1000
+
+    for (let t = 0; t < 600; t += DT) {
+      tick(s, DT);
+      if (Math.floor(t) % 2 === 0 && t % 2 < DT) botAct(s);
+    }
+    // El mapa completo (12B) y el buque factoría (1.5B) siguen lejos.
+    expect(s.zonesUnlocked).toBeLessThan(C.ZONES.length - 1);
+    expect(s.boats.some((b) => b.tier === 7)).toBe(false);
+    assertHealthy(s, "anti-runaway final");
   }, 60_000);
 
   it("PACING: el primer prestigio llega entre 20 y 50 minutos de juego activo", () => {

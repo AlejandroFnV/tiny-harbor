@@ -28,6 +28,7 @@ import {
   unlockZone,
   upgradeBoat,
   upgradeDock,
+  upgradeLonja,
 } from "./sim/sim";
 import { newGame } from "./sim/state";
 import type { GameState, SimEvent } from "./sim/types";
@@ -94,6 +95,13 @@ function handleEvents(events: SimEvent[]): void {
         }
         break;
       }
+      case "golden": {
+        ui.toast(`¡Captura dorada! ×${C.GOLDEN_MULT} (+${Math.round(ev.amount)})`);
+        audio.play("chest");
+        renderer.particles.confetti(window.innerWidth / 2, window.innerHeight * 0.55, 26);
+        renderer.particles.spark(window.innerWidth / 2, window.innerHeight * 0.55, 18, "#dfa93e");
+        break;
+      }
       case "species_found": {
         const sp = C.SPECIES.find((x) => x.id === ev.id);
         if (sp) {
@@ -140,6 +148,16 @@ const actions = {
     const events: SimEvent[] = [];
     if (upgradeDock(state, events).ok) {
       audio.play("buy");
+      persist();
+    } else audio.play("error");
+    handleEvents(events);
+    ui.renderTab();
+  },
+  upgradeLonja() {
+    const events: SimEvent[] = [];
+    if (upgradeLonja(state, events).ok) {
+      audio.play("buy");
+      ui.toast(`La lonja crece: +${Math.round(state.lonjaLvl * C.LONJA_INCOME_BONUS * 100)}% de ingresos esta vuelta.`);
       persist();
     } else audio.play("error");
     handleEvents(events);
@@ -253,6 +271,10 @@ function canvasTap(x: number, y: number): void {
     if (r.ok) {
       audio.play("collect");
       renderer.particles.float(hit.x, hit.y - 30, `+${Math.round(r.gained!)}`);
+      // Racha viva: el segundo texto vende el juego activo.
+      if (state.combo.n >= 2) {
+        renderer.particles.float(hit.x, hit.y - 52, `racha ×${(1 + (state.combo.n - 1) * C.COMBO_STEP).toFixed(2)}`, "#dfa93e");
+      }
     }
   } else if (hit.type === "shoal") {
     const r = tapShoal(state, events);

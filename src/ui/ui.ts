@@ -13,11 +13,13 @@ import {
   dockCost,
   incomeRate,
   legacyCost,
+  lonjaCost,
   managerCost,
   nextZone,
   offlineCapSeconds,
   prestigeGain,
   prestigeMult,
+  prestigeThreshold,
   speedUpgradeCost,
   zoneCost,
 } from "../sim/economy";
@@ -30,6 +32,7 @@ export interface UIActions {
   buyBoat(tier: number): void;
   upgradeBoat(boatId: number, what: "speed" | "cap"): void;
   upgradeDock(): void;
+  upgradeLonja(): void;
   hireManager(): void;
   hireSkipper(index: number): void;
   buyLegacy(branch: C.LegacyBranch): void;
@@ -102,6 +105,7 @@ export class UI {
           <div class="rate" id="rate">0/s</div>
         </div>
         <div class="top-actions">
+          <div class="combo-stamp" id="combo-stamp" hidden><span id="combo-val">×1.0</span><small>RACHA</small></div>
           <div class="rep-stamp" id="rep-stamp" hidden><span id="rep-val">×1.0</span><small>REPUTACIÓN</small></div>
           <button class="btn icon" id="mute-btn" data-action="toggle-mute" aria-label="Sonido">${svg.sound}</button>
         </div>
@@ -158,6 +162,7 @@ export class UI {
       case "up-speed": this.act.upgradeBoat(id, "speed"); break;
       case "up-cap": this.act.upgradeBoat(id, "cap"); break;
       case "up-dock": this.act.upgradeDock(); break;
+      case "up-lonja": this.act.upgradeLonja(); break;
       case "hire-manager": this.act.hireManager(); break;
       case "hire-skipper": this.act.hireSkipper(Number(el.dataset.index)); break;
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
@@ -287,6 +292,13 @@ export class UI {
       ${mLvl >= C.MANAGER_MAX_LVL ? "" : `<button class="btn primary" data-action="hire-manager">${mLvl === 0 ? "Contratar" : "Subir"}<span class="sub" data-cost-label></span></button>`}
     </div>`;
 
+    // La Lonja: sumidero infinito — siempre hay algo que comprar.
+    html += `<div class="card">
+      <div class="info"><div class="name">La Lonja${s.lonjaLvl > 0 ? ` <small>nv.${s.lonjaLvl}</small>` : ""}</div>
+      <div class="desc">Mejor puesto = mejor precio: +${C.LONJA_INCOME_BONUS * 100}% de ingresos por ampliación${s.lonjaLvl > 0 ? ` (ahora +${Math.round(s.lonjaLvl * C.LONJA_INCOME_BONUS * 100)}%)` : ""}. Se pierde al vender el puerto.</div></div>
+      <button class="btn primary" data-action="up-lonja">Ampliar<span class="sub" data-cost-label></span></button>
+    </div>`;
+
     // Taberna: candidatos a patrón (abre con 2+ barcos).
     if (s.boats.length >= C.TAVERN_MIN_BOATS) {
       html += `<div class="section-title">LA TABERNA</div>`;
@@ -369,14 +381,15 @@ export class UI {
 
   private renderPrestigio(): string {
     const s = this.getState();
-    const pct = Math.min(100, (s.lifetime / C.PRESTIGE_MIN_LIFETIME) * 100);
+    const threshold = prestigeThreshold(s);
+    const pct = Math.min(100, (s.lifetime / threshold) * 100);
     const gain = prestigeGain(s);
     const can = canPrestige(s);
     let html = `<div class="prestige-box">
       <h3>Vender el puerto</h3>
-      <p>Empiezas de cero con reputación permanente: <b>+${C.PRESTIGE_MULT_PER_REP * 100}% de ingresos</b> por punto, para siempre. La reputación también se gasta en el árbol de legado (gastarla no baja el multiplicador).</p>
+      <p>Empiezas de cero con reputación permanente: sube tu multiplicador de ingresos para siempre (ahora <b>×${prestigeMult(s).toFixed(2)}</b>). Cuanto más ganes en la vuelta, más reputación — y cada puerto se vende más caro que el anterior. La reputación también se gasta en el árbol de legado (gastarla no baja el multiplicador).</p>
       <div class="bar"><i style="width:${pct}%"></i></div>
-      <p data-live="prestige-progress">${formatMoney(s.lifetime)} / ${formatMoney(C.PRESTIGE_MIN_LIFETIME)} ganados esta vuelta</p>
+      <p data-live="prestige-progress">${formatMoney(s.lifetime)} / ${formatMoney(threshold)} ganados esta vuelta</p>
       <button class="btn gold" data-action="prestige" ${can ? "" : "disabled"} style="margin-top:10px">
         ${can ? `Vender el puerto (+${gain} reputación)` : "Aún no: sigue pescando"}
       </button>
@@ -466,6 +479,12 @@ export class UI {
       dockBtn.querySelector("[data-cost-label]")!.textContent = maxed ? "MÁX" : formatMoney(cost);
       dockBtn.disabled = maxed || s.money < cost;
     }
+    const lonjaBtn = document.querySelector<HTMLButtonElement>("[data-action='up-lonja']");
+    if (lonjaBtn) {
+      const cost = lonjaCost(s);
+      lonjaBtn.querySelector("[data-cost-label]")!.textContent = formatMoney(cost);
+      lonjaBtn.disabled = s.money < cost;
+    }
     const mgrBtn = document.querySelector<HTMLButtonElement>("[data-action='hire-manager']");
     if (mgrBtn) {
       const cost = managerCost(s);
@@ -506,9 +525,9 @@ export class UI {
           pBtn.textContent = can ? `Vender el puerto (+${prestigeGain(s)} reputación)` : "Aún no: sigue pescando";
         }
         const prog = document.querySelector("[data-live='prestige-progress']");
-        if (prog) prog.textContent = `${formatMoney(s.lifetime)} / ${formatMoney(C.PRESTIGE_MIN_LIFETIME)} ganados esta vuelta`;
+        if (prog) prog.textContent = `${formatMoney(s.lifetime)} / ${formatMoney(prestigeThreshold(s))} ganados esta vuelta`;
         const bar = document.querySelector<HTMLElement>(".prestige-box .bar i");
-        if (bar) bar.style.width = `${Math.min(100, (s.lifetime / C.PRESTIGE_MIN_LIFETIME) * 100)}%`;
+        if (bar) bar.style.width = `${Math.min(100, (s.lifetime / prestigeThreshold(s)) * 100)}%`;
       }
     }
   }
@@ -541,6 +560,15 @@ export class UI {
       document.getElementById("rep-val")!.textContent = `×${prestigeMult(s).toFixed(2)}`;
     }
 
+    // Sello de racha (combo de cobro manual): visible desde el 2º eslabón.
+    const comboStamp = document.getElementById("combo-stamp")!;
+    const comboShow = s.combo.n >= 2;
+    if (comboStamp.hidden === comboShow) comboStamp.hidden = !comboShow;
+    if (comboShow) {
+      const bonus = 1 + (s.combo.n - 1) * C.COMBO_STEP;
+      document.getElementById("combo-val")!.textContent = `×${bonus.toFixed(2)}`;
+    }
+
     // Cobrar todo: visible con 2+ cargas listas.
     const readyCount = s.boats.reduce((n, b) => (b.phase === "ready" ? n + 1 : n), 0);
     const ca = document.getElementById("collect-all")!;
@@ -555,7 +583,7 @@ export class UI {
     this.renderMissions(false);
 
     // ¿La estructura cambió por debajo? (compra desde otra vía, prestigio…)
-    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.managerLvl}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}`;
+    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.lonjaLvl}:${s.managerLvl}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}`;
     if (sig !== this.lastStructure) {
       this.lastStructure = sig;
       if (this.sheetOpen) this.renderTab();
@@ -695,11 +723,12 @@ export class UI {
     if (!canPrestige(s)) return;
     const gain = prestigeGain(s);
     const slot = document.getElementById("modal-slot")!;
+    const newMult = 1 + Math.pow(s.repEarned + gain, C.PRESTIGE_MULT_CURVE) * C.PRESTIGE_MULT_PER_REP;
     slot.innerHTML = `<div class="modal-backdrop"><div class="modal">
       <h2>¿Vender el puerto?</h2>
-      <p>Ganas <b>+${gain} de reputación</b> (ingresos ×${(1 + (s.repEarned + gain) * C.PRESTIGE_MULT_PER_REP).toFixed(2)} para siempre).<br>
-      Pierdes: barcos, patrones, mejoras, muelle, gestor y zonas de esta vuelta.<br>
-      Conservas: pescadoteca, logros y árbol de legado.</p>
+      <p>Ganas <b>+${gain} de reputación</b> (ingresos ×${prestigeMult(s).toFixed(2)} → <b>×${newMult.toFixed(2)}</b> para siempre).<br>
+      Pierdes: barcos, patrones, mejoras, muelle, lonja, gestor y zonas de esta vuelta.<br>
+      Conservas: pescadoteca, logros y árbol de legado. El próximo puerto pedirá ${formatMoney(C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, s.prestiges + 1))} para venderse.</p>
       <div class="row">
         <button class="btn" data-action="close-modal">Todavía no</button>
         <button class="btn gold" id="prestige-yes">Vender</button>

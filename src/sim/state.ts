@@ -29,6 +29,7 @@ export function newGame(now: number, seed = 1234567): GameState {
     boats: [],
     nextBoatId: 1,
     dockLevel: 0,
+    lonjaLvl: 0,
     managerLvl: 0,
     managerT: 0,
     zonesUnlocked: 0,
@@ -43,11 +44,12 @@ export function newGame(now: number, seed = 1234567): GameState {
     tavern: { candidates: [], refreshT: C.TAVERN_REFRESH_S },
     legacy: { astillero: 0, escuela: 0, faro: 0 },
     achievements: [],
+    combo: { n: 0, t: 0 },
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
     settings: { muted: false, music: true },
-    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0 },
+    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0 },
     rngSeed: seed >>> 0,
   };
   // Empiezas con un bote heredado, ya faenando.
@@ -75,6 +77,7 @@ export function sanitize(state: GameState): GameState {
   state.repEarned = Math.max(Math.floor(num(state.repEarned, state.reputation, 0, 1e9)), state.reputation);
   state.prestiges = Math.floor(num(state.prestiges, 0, 0, 1e9));
   state.dockLevel = Math.floor(num(state.dockLevel, 0, 0, C.DOCK_MAX_LEVEL));
+  state.lonjaLvl = Math.floor(num(state.lonjaLvl, 0, 0, 1000));
   state.managerLvl = Math.floor(num(state.managerLvl, 0, 0, C.MANAGER_MAX_LVL));
   state.managerT = num(state.managerT, 0, 0, 60);
   state.zonesUnlocked = Math.floor(num(state.zonesUnlocked, 0, 0, C.ZONES.length - 1));
@@ -127,6 +130,11 @@ export function sanitize(state: GameState): GameState {
     state.legacy[b.id] = Math.floor(num(state.legacy[b.id], 0, 0, C.LEGACY_MAX_LVL));
   }
 
+  // Racha de cobro.
+  if (!state.combo || typeof state.combo !== "object") state.combo = { n: 0, t: 0 };
+  state.combo.n = Math.floor(num(state.combo.n, 0, 0, C.COMBO_MAX));
+  state.combo.t = num(state.combo.t, 0, 0, C.COMBO_WINDOW_S);
+
   // Taberna.
   if (!state.tavern || typeof state.tavern !== "object" || !Array.isArray(state.tavern.candidates)) {
     state.tavern = { candidates: [], refreshT: C.TAVERN_REFRESH_S };
@@ -152,7 +160,7 @@ export function sanitize(state: GameState): GameState {
     state.order = null;
   }
   if (!state.stats || typeof state.stats !== "object") {
-    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0 };
+    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0 };
   }
   state.stats.collects = Math.floor(num(state.stats.collects, 0));
   state.stats.boatsBought = Math.floor(num(state.stats.boatsBought, 0));
@@ -161,6 +169,8 @@ export function sanitize(state: GameState): GameState {
   state.stats.ordersDone = Math.floor(num(state.stats.ordersDone, 0));
   state.stats.stormsRisked = Math.floor(num(state.stats.stormsRisked, 0));
   state.stats.skippersHired = Math.floor(num(state.stats.skippersHired, 0));
+  state.stats.bestCombo = Math.floor(num(state.stats.bestCombo, 0, 0, C.COMBO_MAX));
+  state.stats.goldenCatches = Math.floor(num(state.stats.goldenCatches, 0));
 
   if (!Array.isArray(state.missions)) state.missions = [];
   state.missions = state.missions.filter((m) => m && typeof m === "object" && typeof m.text === "string");

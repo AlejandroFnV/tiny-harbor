@@ -66,13 +66,20 @@ describe("fórmulas de coste", () => {
     expect(cargoValue(s, b)).toBeGreaterThan(v0);
   });
 
-  it("la reputación multiplica ingresos", () => {
+  it("la reputación multiplica ingresos (curva ^0.75 desde v1.3)", () => {
     const s = newGame(0);
     const base = incomeRate(s);
     // v1.2: el multiplicador sale de la reputación GANADA total (repEarned).
     s.repEarned = 10;
-    expect(prestigeMult(s)).toBeCloseTo(1 + 10 * C.PRESTIGE_MULT_PER_REP);
+    expect(prestigeMult(s)).toBeCloseTo(1 + Math.pow(10, C.PRESTIGE_MULT_CURVE) * C.PRESTIGE_MULT_PER_REP);
     expect(incomeRate(s)).toBeCloseTo(base * prestigeMult(s));
+  });
+
+  it("la curva de reputación doma la cola: rep 1000 da mucho menos que ×121", () => {
+    const s = newGame(0);
+    s.repEarned = 1000;
+    expect(prestigeMult(s)).toBeLessThan(25); // lineal vieja: ×121 = juego roto
+    expect(prestigeMult(s)).toBeGreaterThan(15);
   });
 });
 

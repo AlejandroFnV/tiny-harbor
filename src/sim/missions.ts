@@ -83,6 +83,14 @@ const TEMPLATES: Template[] = [
       return { param: s.dockLevel + 1, target: 1, text: "Amplía el muelle" };
     },
   },
+  {
+    kind: "lonja",
+    make: (s) => {
+      // No proponerla hasta que el coste esté a la vista del jugador.
+      if (s.lifetime < C.LONJA_BASE_COST / 4) return null;
+      return { param: 0, target: 1, text: "Amplía la lonja" };
+    },
+  },
 ];
 
 function makeMission(state: GameState): Mission | null {

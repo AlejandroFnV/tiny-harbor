@@ -5,7 +5,7 @@
  * y el juego sigue en memoria si el disco no está.
  */
 
-import { SAVE_KEY, SAVE_VERSION } from "./config";
+import { LEGACY_COSTS, SAVE_KEY, SAVE_VERSION } from "./config";
 import { sanitize } from "./state";
 import type { GameState } from "./types";
 
@@ -14,6 +14,8 @@ import type { GameState } from "./types";
  * v1 → v2: se añadieron stats.taps y settings (solo muted); misiones ganaron `param`.
  * v2 → v3: pedidos de la lonja (order/orderT), pescadoteca (discovered) y settings.music.
  * v3 → v4: tripulación (skipper/taberna), árbol de legado (repEarned/legacy), logros y stats nuevas.
+ * v4 → v5: rebalance del prestigio (sqrt→cbrt): la reputación vieja se convierte a la
+ *          escala nueva (rep^(2/3), mismo lifetime equivalente); lonja, racha y stats nuevas.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -54,6 +56,29 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof stats.skippersHired !== "number") stats.skippersHired = 0;
     raw.stats = stats;
     raw.version = 4;
+  },
+  4: (raw) => {
+    // Rebalance v1.3: la rep se ganaba con sqrt(lifetime/div) y ahora con cbrt.
+    // Convertimos lo ganado a la escala nueva preservando el lifetime equivalente:
+    // sqrt(L/d) = r  →  L = d·r²  →  cbrt(L/d) = r^(2/3).
+    const oldEarned = typeof raw.repEarned === "number" && Number.isFinite(raw.repEarned) ? Math.max(0, raw.repEarned) : 0;
+    const newEarned = Math.round(Math.pow(oldEarned, 2 / 3));
+    // Lo gastado en el legado se respeta: se descuenta de la rep disponible nueva.
+    const legacy = (raw.legacy ?? {}) as Record<string, unknown>;
+    let spent = 0;
+    for (const key of ["astillero", "escuela", "faro"]) {
+      const lvl = typeof legacy[key] === "number" ? Math.max(0, Math.min(LEGACY_COSTS.length, Math.floor(legacy[key] as number))) : 0;
+      for (let i = 0; i < lvl; i++) spent += LEGACY_COSTS[i];
+    }
+    raw.repEarned = newEarned;
+    raw.reputation = Math.max(0, newEarned - spent);
+    if (typeof raw.lonjaLvl !== "number") raw.lonjaLvl = 0;
+    raw.combo = { n: 0, t: 0 };
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.bestCombo !== "number") stats.bestCombo = 0;
+    if (typeof stats.goldenCatches !== "number") stats.goldenCatches = 0;
+    raw.stats = stats;
+    raw.version = 5;
   },
 };
 

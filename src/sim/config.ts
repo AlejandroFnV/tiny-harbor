@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -125,12 +125,53 @@ export const OFFLINE_MIN_S = 60;
 // ---------------------------------------------------------------------------
 // Prestigio ("vender el puerto")
 // ---------------------------------------------------------------------------
-/** Ganancias acumuladas de la vuelta necesarias para poder prestigiar. */
+/**
+ * Ganancias de la vuelta necesarias para la PRIMERA venta; cada venta
+ * multiplica el umbral ×PRESTIGE_THRESHOLD_GROWTH (cada puerto vale más
+ * que el anterior → no se puede spamear la venta).
+ */
 export const PRESTIGE_MIN_LIFETIME = 400_000;
-/** Reputación ganada = floor(sqrt(lifetime / PRESTIGE_REP_DIVISOR)). */
+export const PRESTIGE_THRESHOLD_GROWTH = 3;
+/**
+ * Reputación ganada = floor(cbrt(lifetime / PRESTIGE_REP_DIVISOR)).
+ * Raíz cúbica (v1.3, antes sqrt): con el contenido v1.2 llegando a lifetimes
+ * de decenas de B, sqrt daba cientos de rep en una vuelta y el multiplicador
+ * rompía el juego tras el primer prestigio.
+ */
 export const PRESTIGE_REP_DIVISOR = 50_000;
-/** Multiplicador de ingresos permanente por punto de reputación. */
+/**
+ * Multiplicador permanente = 1 + PER_REP × repEarned^CURVE.
+ * La curva <1 doma la cola: rep 2 → +20%, rep 100 → ×4.8, rep 1000 → ×22
+ * (con la lineal vieja: rep 1000 → ×121 = juego roto).
+ */
 export const PRESTIGE_MULT_PER_REP = 0.12;
+export const PRESTIGE_MULT_CURVE = 0.75;
+
+// ---------------------------------------------------------------------------
+// La Lonja (ampliaciones infinitas — sumidero de dinero del late game)
+// ---------------------------------------------------------------------------
+/** Coste = LONJA_BASE_COST × LONJA_COST_GROWTH^nivel. Sin techo de niveles. */
+export const LONJA_BASE_COST = 15_000;
+export const LONJA_COST_GROWTH = 3.5;
+/** Bonus de ingresos por nivel (aditivo: ×(1 + bonus·nivel)). Se pierde al prestigiar. */
+export const LONJA_INCOME_BONUS = 0.15;
+
+// ---------------------------------------------------------------------------
+// Racha de cobro manual (combo) — premia el juego activo
+// ---------------------------------------------------------------------------
+/** Segundos entre cobros manuales para mantener la racha viva. */
+export const COMBO_WINDOW_S = 4;
+/** Bonus por eslabón de racha (el primer cobro no bonifica). */
+export const COMBO_STEP = 0.04;
+/** Eslabones máximos (bonus máximo = STEP × (MAX - 1)). */
+export const COMBO_MAX = 15;
+
+// ---------------------------------------------------------------------------
+// Captura dorada — cobro manual con suerte
+// ---------------------------------------------------------------------------
+/** Probabilidad por cobro MANUAL de que la carga sea dorada (×GOLDEN_MULT). */
+export const GOLDEN_CHANCE = 0.03;
+export const GOLDEN_MULT = 3;
 
 // ---------------------------------------------------------------------------
 // Eventos aleatorios
@@ -348,6 +389,9 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "tormentas5", name: "Temerario", desc: "Aguanta 5 tormentas faenando" },
   { id: "patrones3", name: "Casa llena", desc: "Ficha 3 patrones en la taberna" },
   { id: "legado1", name: "Herencia", desc: "Compra tu primera mejora de legado" },
+  { id: "lonja5", name: "Puesto fijo", desc: "Amplía la lonja 5 veces" },
+  { id: "racha10", name: "Manos de mercado", desc: "Encadena una racha de 10 cobros" },
+  { id: "dorado5", name: "Toque de Midas", desc: "Pesca 5 capturas doradas" },
 ];
 
 // ---------------------------------------------------------------------------

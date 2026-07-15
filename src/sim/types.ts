@@ -39,7 +39,8 @@ export type MissionKind =
   | "unlock_zone"  // desbloquea la zona Z
   | "hire_manager" // contrata/sube gestor
   | "hire_skipper" // ficha un patrón en la taberna
-  | "dock";        // amplía el muelle
+  | "dock"         // amplía el muelle
+  | "lonja";       // amplía la lonja
 
 export interface Mission {
   id: number;
@@ -96,6 +97,8 @@ export interface GameState {
   boats: Boat[];
   nextBoatId: number;
   dockLevel: number;
+  /** Ampliaciones de la lonja (+ingresos, sin techo). Se resetea al prestigiar. */
+  lonjaLvl: number;
   managerLvl: number;
   /** Timer interno del gestor (s hasta el próximo auto-cobro). */
   managerT: number;
@@ -124,6 +127,9 @@ export interface GameState {
   /** Logros conseguidos (ids). PERSISTEN entre prestigios. */
   achievements: string[];
 
+  /** Racha de cobro manual: eslabones y segundos de vida que le quedan. */
+  combo: { n: number; t: number };
+
   /** Reloj de pared (ms epoch) de la última vez que se vio el juego (offline calc). */
   lastSeen: number;
   /** Tiempo total jugado (s, esta vuelta). */
@@ -139,6 +145,8 @@ export interface GameState {
     ordersDone: number;
     stormsRisked: number;
     skippersHired: number;
+    bestCombo: number;
+    goldenCatches: number;
   };
   rngSeed: number;
 }
@@ -157,4 +165,5 @@ export type SimEvent =
   | { kind: "order_gone" }
   | { kind: "species_found"; id: string }
   | { kind: "skipper_hired"; name: string; boatId: number }
-  | { kind: "achievement"; id: string };
+  | { kind: "achievement"; id: string }
+  | { kind: "golden"; boatId: number; amount: number };

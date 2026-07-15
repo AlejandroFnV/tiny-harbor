@@ -200,8 +200,9 @@ describe("migración v3 → v4", () => {
     const s = deserialize(JSON.stringify(v3));
     expect(s).not.toBeNull();
     expect(s!.version).toBe(C.SAVE_VERSION);
-    expect(s!.repEarned).toBe(7);
-    expect(s!.reputation).toBe(7);
+    // v4→v5 convierte la rep a la escala cbrt: round(7^(2/3)) = 4.
+    expect(s!.repEarned).toBe(Math.round(Math.pow(7, 2 / 3)));
+    expect(s!.reputation).toBe(s!.repEarned);
     expect(s!.legacy).toEqual({ astillero: 0, escuela: 0, faro: 0 });
     expect(s!.achievements).toEqual([]);
     expect(s!.tavern.candidates).toEqual([]);

@@ -10,11 +10,13 @@ import {
   canPrestige,
   capUpgradeCost,
   cargoValue,
+  comboMult,
   cycleTime,
   dockCost,
   eventMult,
   incomeRate,
   legacyCost,
+  lonjaCost,
   managerCost,
   nextZone,
   prestigeGain,
@@ -75,7 +77,16 @@ function rollSpecies(state: GameState, boat: Boat, events: SimEvent[]): void {
 }
 
 function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events: SimEvent[]): number {
-  const amount = boat.cargo * eventMult(state);
+  let amount = boat.cargo * eventMult(state);
+  // Cobro manual: bonifica la racha viva y puede salir dorado (×3).
+  if (!auto) {
+    amount *= comboMult(state);
+    if (nextRand(state) < C.GOLDEN_CHANCE) {
+      amount *= C.GOLDEN_MULT;
+      state.stats.goldenCatches++;
+      events.push({ kind: "golden", boatId: boat.id, amount });
+    }
+  }
   const orderMult = boat.skipper?.trait === "pregonero" ? C.TRAIT_ORDER_MULT : 1;
   gainMoney(state, amount, events, orderMult);
   boat.cargo = 0;
@@ -93,6 +104,15 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
 export function tick(state: GameState, dt: number, events: SimEvent[] = []): SimEvent[] {
   if (!Number.isFinite(dt) || dt <= 0) return events;
   state.playTime += dt;
+
+  // Racha de cobro manual: caduca si pasan COMBO_WINDOW_S sin cobrar.
+  if (state.combo.n > 0) {
+    state.combo.t -= dt;
+    if (state.combo.t <= 0) {
+      state.combo.n = 0;
+      state.combo.t = 0;
+    }
+  }
 
   // Barcos ------------------------------------------------------------------
   const stormActive = state.event?.kind === "storm" && state.event.stage === "active";
@@ -193,6 +213,9 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   tormentas5: (s) => s.stats.stormsRisked >= 5,
   patrones3: (s) => s.stats.skippersHired >= 3,
   legado1: (s) => s.legacy.astillero + s.legacy.escuela + s.legacy.faro >= 1,
+  lonja5: (s) => s.lonjaLvl >= 5,
+  racha10: (s) => s.stats.bestCombo >= 10,
+  dorado5: (s) => s.stats.goldenCatches >= 5,
 };
 
 function tickAchievements(state: GameState, events: SimEvent[]): void {
@@ -272,20 +295,30 @@ export interface ActionResult {
   reason?: string;
 }
 
+/** Alarga la racha de cobro manual (un eslabón por ACCIÓN, no por barco). */
+function bumpCombo(state: GameState): void {
+  state.combo.n = Math.min(C.COMBO_MAX, state.combo.n + 1);
+  state.combo.t = C.COMBO_WINDOW_S;
+  if (state.combo.n > state.stats.bestCombo) state.stats.bestCombo = state.combo.n;
+}
+
 export function collectBoat(state: GameState, boatId: number, events: SimEvent[] = []): ActionResult {
   const boat = state.boats.find((b) => b.id === boatId);
   if (!boat || boat.phase !== "ready") return { ok: false, reason: "not_ready" };
+  bumpCombo(state);
   const gained = collectBoatInternal(state, boat, false, events);
   return { ok: true, gained };
 }
 
 /** Cobra todos los barcos listos (botón "cobrar todo" del gestor manual). */
 export function collectAll(state: GameState, events: SimEvent[] = []): ActionResult {
+  if (!state.boats.some((b) => b.phase === "ready")) return { ok: false, reason: "none_ready" };
+  bumpCombo(state);
   let gained = 0;
   for (const boat of state.boats) {
     if (boat.phase === "ready") gained += collectBoatInternal(state, boat, false, events);
   }
-  return gained > 0 ? { ok: true, gained } : { ok: false, reason: "none_ready" };
+  return { ok: true, gained };
 }
 
 export function buyBoat(state: GameState, tier: number, events: SimEvent[] = []): ActionResult {
@@ -334,6 +367,16 @@ export function upgradeDock(state: GameState, events: SimEvent[] = []): ActionRe
   state.money -= cost;
   state.dockLevel++;
   bumpMission(state, "dock", 1, events, state.dockLevel);
+  return { ok: true };
+}
+
+/** Amplía la lonja: +ingresos permanentes de la vuelta, coste sin techo. */
+export function upgradeLonja(state: GameState, events: SimEvent[] = []): ActionResult {
+  const cost = lonjaCost(state);
+  if (state.money < cost) return { ok: false, reason: "poor" };
+  state.money -= cost;
+  state.lonjaLvl++;
+  bumpMission(state, "lonja", 1, events);
   return { ok: true };
 }
 
@@ -447,9 +490,11 @@ export function doPrestige(state: GameState, now: number): ActionResult {
   state.nextBoatId = 1;
   state.boats.push(newBoat(state, 0));
   state.dockLevel = 0;
+  state.lonjaLvl = 0;
   state.managerLvl = 0;
   state.managerT = 0;
   state.zonesUnlocked = 0;
+  state.combo = { n: 0, t: 0 };
   state.missions = [];
   state.missionsDone = 0;
   state.event = null;
