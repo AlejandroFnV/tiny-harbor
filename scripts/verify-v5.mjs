@@ -51,6 +51,34 @@ const lonjaLvl = await page.evaluate(() => window.TH.state.lonjaLvl);
 check("comprar lonja sube nivel", lonjaLvl === 1, `lonjaLvl=${lonjaLvl}`);
 await page.screenshot({ path: `${OUT}v5-puerto-lonja.png` });
 
+// --- 1b. Mantener pulsado = mejora en cadena -----------------------------------
+await page.evaluate(() => {
+  window.TH.give(1e9);
+  window.TH.step(0.1);
+});
+await page.click("[data-tab='flota']");
+await page.evaluate(() => window.TH.step(0.1));
+const spdBtn = await page.$("[data-action='up-speed']");
+await spdBtn.scrollIntoViewIfNeeded();
+await page.evaluate(() => window.TH.step(0.1));
+const box = await spdBtn.boundingBox();
+const lvlBefore = await page.evaluate(() => window.TH.state.boats[0].speedLvl);
+await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+await page.mouse.down();
+await new Promise((r) => setTimeout(r, 2500));
+await page.mouse.up();
+const lvlAfter = await page.evaluate(() => window.TH.state.boats[0].speedLvl);
+check("hold sobre 'Velocidad' mejora en cadena", lvlAfter - lvlBefore >= 4, `${lvlBefore} → ${lvlAfter} en 2.5s`);
+// Tap corto: exactamente +1.
+await new Promise((r) => setTimeout(r, 400)); // deja caducar el flag anti-doble del hold
+const btn2 = await page.$("[data-action='up-speed']");
+await btn2.scrollIntoViewIfNeeded();
+const box2 = await btn2.boundingBox();
+await page.mouse.click(box2.x + box2.width / 2, box2.y + box2.height / 2);
+await new Promise((r) => setTimeout(r, 450));
+const lvlTap = await page.evaluate(() => window.TH.state.boats[0].speedLvl);
+check("tap corto mejora exactamente 1", lvlTap === lvlAfter + 1, `${lvlAfter} → ${lvlTap}`);
+
 // --- 2. Racha ----------------------------------------------------------------
 await page.click("[data-tab='puerto']"); // cierra sheet
 // Tres cobros manuales encadenados: tap físico sobre el canvas (hit-test real),

@@ -86,6 +86,8 @@ export class UI {
   private lastStructure = "";
   private missionSig = "";
   private bumpTimer: number | null = null;
+  private holdTimer: number | null = null;
+  private holdSuppressClick = false;
 
   constructor(
     root: HTMLElement,
@@ -132,10 +134,55 @@ export class UI {
       <div id="modal-slot"></div>
     `;
 
+    // Mantener pulsado = acción en cadena (mejoras y lonja): tap corto = 1,
+    // hold = ráfaga que acelera. Para al soltar, al quedarse sin dinero o al MÁX.
+    const HOLD_ACTIONS = new Set(["up-speed", "up-cap", "up-lonja"]);
+    this.root.addEventListener("pointerdown", (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
+      if (!el || !HOLD_ACTIONS.has(el.dataset.action!)) return;
+      const action = el.dataset.action!;
+      // renderTab() reemplaza el DOM tras cada compra: refrescar la referencia.
+      const selector = `[data-action='${action}']${el.dataset.id ? `[data-id='${el.dataset.id}']` : ""}`;
+      let delay = 350;
+      const fire = () => {
+        const btn = this.root.querySelector<HTMLButtonElement>(selector);
+        if (!btn || btn.disabled) {
+          stop();
+          return;
+        }
+        this.dispatch(action, btn);
+        this.holdSuppressClick = true;
+        delay = Math.max(60, delay * 0.8);
+        this.holdTimer = window.setTimeout(fire, delay);
+      };
+      const stop = () => {
+        if (this.holdTimer !== null) {
+          clearTimeout(this.holdTimer);
+          this.holdTimer = null;
+        }
+        // El click de soltar puede no llegar (el DOM se reemplaza en cada compra
+        // y mousedown/mouseup acaban en targets distintos): caducar el flag para
+        // que no se coma el siguiente tap legítimo.
+        window.setTimeout(() => {
+          this.holdSuppressClick = false;
+        }, 300);
+        window.removeEventListener("pointerup", stop);
+        window.removeEventListener("pointercancel", stop);
+      };
+      this.holdTimer = window.setTimeout(fire, 400);
+      window.addEventListener("pointerup", stop);
+      window.addEventListener("pointercancel", stop);
+    });
+
     // Delegación de eventos para todo lo accionable.
     this.root.addEventListener("click", (e) => {
       const el = (e.target as HTMLElement).closest<HTMLElement>("[data-action],[data-tab]");
       if (!el) return;
+      // Si el hold ya disparó la ráfaga, el click de soltar no añade una más.
+      if (this.holdSuppressClick) {
+        this.holdSuppressClick = false;
+        if (el.dataset.action && HOLD_ACTIONS.has(el.dataset.action)) return;
+      }
       const tab = el.dataset.tab as TabName | undefined;
       if (tab) {
         this.act.uiSound();
