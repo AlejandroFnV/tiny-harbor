@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -139,6 +139,13 @@ export const OFFLINE_MIN_S = 60;
  */
 export const PRESTIGE_MIN_LIFETIME = 400_000;
 export const PRESTIGE_THRESHOLD_GROWTH = 3;
+/**
+ * v1.6.1: el umbral también recuerda tu última venta — el próximo puerto pide
+ * superar en este factor lo que GANASTE con el anterior. Sin esto, vender con
+ * mucho overshoot (umbral 400k, venta con 5M) dejaba el siguiente umbral (1.2M)
+ * por debajo de lo ya demostrado y se podía re-vender en 2-3 minutos.
+ */
+export const PRESTIGE_BEAT_FACTOR = 1.4;
 /**
  * Reputación ganada = floor(cbrt(lifetime / PRESTIGE_REP_DIVISOR)).
  * Raíz cúbica (v1.3, antes sqrt): con el contenido v1.2 llegando a lifetimes

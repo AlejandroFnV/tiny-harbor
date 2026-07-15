@@ -26,6 +26,7 @@ export function newGame(now: number, seed = 1234567): GameState {
     reputation: 0,
     repEarned: 0,
     prestiges: 0,
+    lastSaleLifetime: 0,
     boats: [],
     nextBoatId: 1,
     dockLevel: 0,
@@ -84,6 +85,7 @@ export function sanitize(state: GameState): GameState {
   // repEarned nunca puede ser menor que la reputación disponible.
   state.repEarned = Math.max(Math.floor(num(state.repEarned, state.reputation, 0, 1e9)), state.reputation);
   state.prestiges = Math.floor(num(state.prestiges, 0, 0, 1e9));
+  state.lastSaleLifetime = num(state.lastSaleLifetime, 0);
   state.dockLevel = Math.floor(num(state.dockLevel, 0, 0, C.DOCK_MAX_LEVEL));
   state.lonjaLvl = Math.floor(num(state.lonjaLvl, 0, 0, 1000));
   state.managerLvl = Math.floor(num(state.managerLvl, 0, 0, C.MANAGER_MAX_LVL));

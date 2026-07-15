@@ -115,6 +115,17 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     raw.stats = stats;
     raw.version = 8;
   },
+  8: (raw) => {
+    // El umbral pasa a recordar la última venta; para saves viejos usamos el
+    // mejor lifetime conocido si ya vendió alguna vez (evita el re-sell fácil).
+    if (typeof raw.lastSaleLifetime !== "number") {
+      const stats = (raw.stats ?? {}) as Record<string, unknown>;
+      const prestiges = typeof raw.prestiges === "number" ? raw.prestiges : 0;
+      const best = typeof stats.bestLifetime === "number" ? stats.bestLifetime : 0;
+      raw.lastSaleLifetime = prestiges > 0 ? best : 0;
+    }
+    raw.version = 9;
+  },
 };
 
 export function serialize(state: GameState): string {

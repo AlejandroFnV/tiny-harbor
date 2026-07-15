@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as C from "../src/sim/config";
-import { canPrestige, prestigeGain, prestigeMult } from "../src/sim/economy";
+import { canPrestige, prestigeGain, prestigeMult, prestigeThreshold } from "../src/sim/economy";
 import { doPrestige } from "../src/sim/sim";
 import { newGame } from "../src/sim/state";
 
@@ -27,6 +27,21 @@ describe("prestigio", () => {
     const gain = prestigeGain(s);
     expect(gain).toBeGreaterThan(50);
     expect(gain).toBeLessThan(150); // con sqrt salían 1000 → mult ×121
+  });
+
+  it("vender con overshoot sube el umbral por encima de lo vendido (anti re-sell)", () => {
+    // El caso reportado: umbral 400k, venta con 5M → el siguiente NO puede ser 1.2M.
+    const s = newGame(0);
+    s.lifetime = 5_000_000;
+    doPrestige(s, 0);
+    const next = prestigeThreshold(s);
+    expect(next).toBeCloseTo(5_000_000 * C.PRESTIGE_BEAT_FACTOR);
+    expect(next).toBeGreaterThan(C.PRESTIGE_MIN_LIFETIME * C.PRESTIGE_THRESHOLD_GROWTH);
+    // Y sin overshoot, manda la escalera geométrica de siempre.
+    const t = newGame(0);
+    t.lifetime = C.PRESTIGE_MIN_LIFETIME;
+    doPrestige(t, 0);
+    expect(prestigeThreshold(t)).toBe(C.PRESTIGE_MIN_LIFETIME * C.PRESTIGE_THRESHOLD_GROWTH);
   });
 
   it("el umbral de venta escala ×3 por puerto vendido", () => {

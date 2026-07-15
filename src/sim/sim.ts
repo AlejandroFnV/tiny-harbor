@@ -748,6 +748,7 @@ export function doPrestige(state: GameState, now: number, buyerId = "naviera", e
   state.reputation += gain;
   state.repEarned += gain;
   state.prestiges++;
+  state.lastSaleLifetime = state.lifetime; // el próximo puerto pedirá superarte
   if (gain > state.stats.bestRepGain) state.stats.bestRepGain = gain;
   if (buyerId !== "naviera") state.stats.specialSales++;
   state.money = Math.max(0, startCash);

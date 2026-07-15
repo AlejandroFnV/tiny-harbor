@@ -272,9 +272,15 @@ export function buyerGain(state: GameState, buyerId: string): number {
   return base;
 }
 
-/** Umbral de venta de ESTA vuelta: cada puerto vendido pide el triple que el anterior. */
+/**
+ * Umbral de venta de ESTA vuelta: el triple por puerto vendido Y siempre por
+ * encima de lo que ganaste en la vuelta que vendiste (nada de re-vender en 2 min).
+ */
 export function prestigeThreshold(state: GameState): number {
-  return C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, state.prestiges);
+  return Math.max(
+    C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, state.prestiges),
+    state.lastSaleLifetime * C.PRESTIGE_BEAT_FACTOR,
+  );
 }
 
 export function canPrestige(state: GameState): boolean {

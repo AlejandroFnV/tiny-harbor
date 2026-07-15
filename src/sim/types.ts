@@ -94,6 +94,8 @@ export interface GameState {
   /** Reputación ganada total (nunca baja; de aquí sale el multiplicador). */
   repEarned: number;
   prestiges: number;
+  /** Lifetime con el que se vendió el último puerto (sube el umbral siguiente). */
+  lastSaleLifetime: number;
 
   boats: Boat[];
   nextBoatId: number;
