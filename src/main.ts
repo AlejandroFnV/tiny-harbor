@@ -16,15 +16,18 @@ import {
   acceptOrder,
   buyBoat,
   buyLegacy,
+  claimGift,
   collectAll,
   collectBoat,
   declineOrder,
   doPrestige,
   hireManager,
   hireSkipper,
+  renamePort,
   resolveStorm,
   startExpedition,
   tapDrift,
+  tapKraken,
   tapShoal,
   tick,
   unlockZone,
@@ -36,6 +39,7 @@ import { formatMoney } from "./sim/format";
 import { newGame } from "./sim/state";
 import type { GameState, SimEvent } from "./sim/types";
 import { Renderer } from "./render/renderer";
+import { boatThumbURL } from "./render/sprites";
 import { AudioEngine } from "./audio/audio";
 import { UI } from "./ui/ui";
 import { Tutorial } from "./ui/tutorial";
@@ -63,7 +67,7 @@ function persist(): void {
 }
 
 // --------------------------------------------------------------------------- acciones
-const RARITY_TEXT = { comun: "", rara: " (¡rara!)", epica: " (¡¡ÉPICA!!)" } as const;
+const RARITY_TEXT = { comun: "", rara: " (¡rara!)", epica: " (¡¡ÉPICA!!)", leyenda: " (¡¡¡LEYENDA!!!)" } as const;
 
 function handleEvents(events: SimEvent[]): void {
   if (events.length === 0) return;
@@ -75,7 +79,16 @@ function handleEvents(events: SimEvent[]): void {
         audio.play("mission");
         break;
       case "event_start":
-        audio.play(ev.event === "storm" ? "storm" : "event");
+        audio.play(ev.event === "frenzy" ? "event" : "storm");
+        break;
+      case "kraken_repelled":
+        ui.toast(`¡El Kraken huye! Botín de leyenda: +${formatMoney(ev.amount)}.`);
+        audio.play("prestige");
+        renderer.particles.confetti(window.innerWidth / 2, window.innerHeight * 0.5, 44);
+        break;
+      case "kraken_escaped":
+        ui.toast(`El Kraken se sumerge con ${formatMoney(ev.lost)} de tu carga…`);
+        audio.play("error");
         break;
       case "order_offer":
         audio.play("event");
@@ -194,6 +207,16 @@ const actions = {
     handleEvents(events);
     ui.renderTab();
   },
+  renamePort(name: string) {
+    renamePort(state, name);
+    audio.play("ui");
+    ui.toast(`Puerto de ${state.portName || "Tiny Harbor"}. Suena bien.`);
+    persist();
+  },
+  shareCard() {
+    audio.play("ui");
+    void buildShareCard();
+  },
   hireManager() {
     const events: SimEvent[] = [];
     if (hireManager(state, events).ok) {
@@ -290,6 +313,98 @@ const actions = {
 const ui = new UI(uiRoot, () => state, actions);
 const tutorial = new Tutorial(() => state, renderer, ui);
 
+// ------------------------------------------------------------- tarjeta de capitán
+/** Genera una tarjeta PNG con el puerto y sus récords, y la comparte (o descarga). */
+async function buildShareCard(): Promise<void> {
+  const W = 640;
+  const H = 800;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const g = c.getContext("2d")!;
+
+  // Fondo: atardecer del juego en bandas pixel.
+  const sky = ["#f7dca8", "#f4c88f", "#f1b377"];
+  sky.forEach((col, i) => {
+    g.fillStyle = col;
+    g.fillRect(0, (H * 0.42 * i) / 3, W, H);
+  });
+  const sea = ["#8fc9b6", "#4aa39b", "#2f8289", "#216271"];
+  sea.forEach((col, i) => {
+    g.fillStyle = col;
+    g.fillRect(0, H * 0.42 + ((H * 0.58) * i) / 4, W, H);
+  });
+  // Marco tipo sello.
+  g.strokeStyle = "#2b3245";
+  g.lineWidth = 6;
+  g.strokeRect(12, 12, W - 24, H - 24);
+
+  // El mejor barco de la flota, en grande y pixelado.
+  const bestTier = state.boats.length ? Math.max(...state.boats.map((b) => b.tier)) : 0;
+  const img = new Image();
+  img.src = boatThumbURL(bestTier);
+  await img.decode();
+  g.imageSmoothingEnabled = false;
+  const scale = Math.min(8, Math.floor((W * 0.6) / img.width));
+  g.drawImage(img, (W - img.width * scale) / 2, H * 0.40 - (img.height * scale) / 2, img.width * scale, img.height * scale);
+
+  const port = state.portName || "Tiny Harbor";
+  g.fillStyle = "#2b3245";
+  g.textAlign = "center";
+  g.font = "800 42px 'Bricolage Grotesque Variable', sans-serif";
+  g.fillText(`Puerto de ${port}`, W / 2, 88);
+  g.font = "600 20px 'Bricolage Grotesque Variable', sans-serif";
+  g.fillText("TARJETA DE CAPITÁN", W / 2, 122);
+
+  g.fillStyle = "#f7efdb";
+  const lines = [
+    `${formatMoney(state.totalEarned)} ganados · ${state.prestiges} puertos vendidos`,
+    `${state.discovered.length}/${C.SPECIES.length} especies · ${state.relics.length}/${C.RELICS.length} reliquias`,
+    `${state.achievements.length}/${C.ACHIEVEMENTS.length} logros · ${state.stats.krakensRepelled} krakens ahuyentados`,
+  ];
+  g.font = "700 24px 'Bricolage Grotesque Variable', sans-serif";
+  lines.forEach((l, i) => g.fillText(l, W / 2, H * 0.62 + i * 44));
+
+  g.font = "600 18px 'Bricolage Grotesque Variable', sans-serif";
+  g.fillStyle = "#eab14e";
+  g.fillText("tinyharbor.alejandrofnv.es", W / 2, H - 44);
+
+  c.toBlob(async (blob) => {
+    if (!blob) return;
+    const file = new File([blob], "tiny-harbor.png", { type: "image/png" });
+    // Web Share con imagen si el dispositivo puede; si no, descarga.
+    if (navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: `Puerto de ${port} — Tiny Harbor` });
+        return;
+      } catch {
+        /* cancelado → descarga */
+      }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "tiny-harbor.png";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    ui.toast("Tarjeta guardada. Presume de puerto.");
+  }, "image/png");
+}
+
+// ------------------------------------------------------------- regalo diario
+function checkGift(): void {
+  const events: SimEvent[] = [];
+  const gift = claimGift(state, Date.now(), events);
+  if (gift) {
+    ui.showGiftModal(gift.day, gift.amount, () => {
+      audio.play("chest");
+      const t = ui.coinTarget();
+      renderer.particles.coins(window.innerWidth / 2, window.innerHeight / 2, t.x, t.y, 14);
+    });
+    persist();
+  }
+  handleEvents(events);
+}
+
 // (El grano riso de la v1 se retiró: el pixel art va limpio.)
 
 // --------------------------------------------------------------------------- input
@@ -314,6 +429,13 @@ function canvasTap(x: number, y: number): void {
       renderer.particles.float(hit.x, hit.y - 20, `+${Math.round(r.gained!)}`, "#dfa93e");
       renderer.particles.fish(hit.x, hit.y);
       renderer.particles.splash(hit.x, hit.y, 8);
+    }
+  } else if (hit.type === "kraken") {
+    const r = tapKraken(state, events);
+    if (r.ok) {
+      audio.play("collect");
+      renderer.particles.splash(hit.x, hit.y, 10);
+      renderer.particles.spark(hit.x, hit.y, 6, "#e3664b");
     }
   } else if (hit.type === "drift") {
     const r = tapDrift(state, events);
@@ -358,12 +480,14 @@ document.addEventListener("visibilitychange", () => {
   } else {
     audio.resume();
     checkOffline(true);
+    checkGift();
   }
 });
 window.addEventListener("pagehide", persist);
 
-// Al arrancar: cofre si venías de una ausencia.
+// Al arrancar: cofre si venías de una ausencia, y el paquete del pescador si toca.
 checkOffline(true);
+checkGift();
 
 // --------------------------------------------------------------------------- loop
 let last = performance.now();

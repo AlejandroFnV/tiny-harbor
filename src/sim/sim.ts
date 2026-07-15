@@ -17,9 +17,12 @@ import {
   eventMult,
   expeditionBooty,
   expeditionDuration,
+  giftAmount,
   hasRelic,
   incomeRate,
   isAway,
+  isMidday,
+  isNight,
   legacyCost,
   lonjaCost,
   managerCost,
@@ -50,6 +53,7 @@ function gainMoney(state: GameState, amount: number, events: SimEvent[], orderMu
   state.money += amount;
   state.lifetime += amount;
   state.totalEarned += amount;
+  if (state.lifetime > state.stats.bestLifetime) state.stats.bestLifetime = state.lifetime;
   // Pedido de la lonja activo: toda pesca cuenta para el objetivo.
   const order = state.order;
   if (order && order.stage === "active") {
@@ -67,11 +71,25 @@ function gainMoney(state: GameState, amount: number, events: SimEvent[], orderMu
   bumpMission(state, "earn", amount, events);
 }
 
+/** Condiciones de las leyendas: el CUÁNDO importa más que la suerte. */
+const LEGEND_CONDS: Record<string, (s: GameState) => boolean> = {
+  reysol: (s) => isMidday(s),
+  sierpe: (s) => s.event?.kind === "storm" && s.event.stage === "active" && s.event.choice === "risk",
+  farolreal: (s) => isNight(s),
+  fantasma: (s) => s.combo.n >= 10,
+};
+
 /** Tirada de descubrimiento de especie (zona actual, no descubiertas). */
 function rollSpecies(state: GameState, boat: Boat, events: SimEvent[]): void {
   const mult = speciesChanceMult(state, boat);
   for (const sp of C.SPECIES) {
-    if (sp.zone !== state.zonesUnlocked) continue;
+    if (sp.rarity === "leyenda") {
+      // Las leyendas: desde su zona en adelante, y SOLO si se cumple su condición.
+      if (state.zonesUnlocked < sp.zone) continue;
+      if (!LEGEND_CONDS[sp.id]?.(state)) continue;
+    } else if (sp.zone !== state.zonesUnlocked) {
+      continue;
+    }
     if (state.discovered.includes(sp.id)) continue;
     if (nextRand(state) < C.SPECIES_CHANCE[sp.rarity] * mult) {
       state.discovered.push(sp.id);
@@ -328,6 +346,11 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   reliquias6: (s) => s.relics.length >= 6,
   reliquias12: (s) => s.relics.length >= C.RELICS.length,
   lonjero: (s) => s.stats.soldHigh >= 30,
+  kraken1: (s) => s.stats.krakensRepelled >= 1,
+  kraken5: (s) => s.stats.krakensRepelled >= 5,
+  leyenda1: (s) => s.discovered.some((id) => LEGEND_CONDS[id] !== undefined),
+  leyendas4: (s) => Object.keys(LEGEND_CONDS).every((id) => s.discovered.includes(id)),
+  fiel7: (s) => s.stats.bestGiftStreak >= 7,
 };
 
 function tickAchievements(state: GameState, events: SimEvent[]): void {
@@ -374,7 +397,22 @@ function tickEvent(state: GameState, dt: number, events: SimEvent[]): void {
         ev.stage = "active";
         ev.choice = ev.choice ?? "shelter";
         ev.remaining = C.STORM_DURATION_S;
+      } else if (ev.kind === "kraken" && ev.stage === "warning") {
+        ev.stage = "active";
+        ev.remaining = C.KRAKEN_DURATION_S;
       } else {
+        // Kraken sin ahuyentar: arranca carga a los barcos cargados y se sumerge.
+        if (ev.kind === "kraken" && ev.tapsLeft > 0) {
+          let lost = 0;
+          for (const b of state.boats) {
+            if (b.cargo > 0) {
+              const bite = b.cargo * C.KRAKEN_CARGO_LOSS;
+              b.cargo -= bite;
+              lost += bite;
+            }
+          }
+          events.push({ kind: "kraken_escaped", lost });
+        }
         events.push({ kind: "event_end", event: ev.kind });
         state.event = null;
         state.eventT = C.EVENT_INTERVAL_MIN_S + nextRand(state) * (C.EVENT_INTERVAL_MAX_S - C.EVENT_INTERVAL_MIN_S);
@@ -386,6 +424,14 @@ function tickEvent(state: GameState, dt: number, events: SimEvent[]): void {
   state.eventT -= dt;
   if (state.eventT > 0) return;
   state.eventT = 0; // consumido: no dejar residuo negativo
+
+  // El Kraken solo asoma en aguas profundas y con flota que morder.
+  const canKraken = state.zonesUnlocked >= C.KRAKEN_MIN_ZONE && state.boats.length >= C.KRAKEN_MIN_BOATS;
+  if (canKraken && nextRand(state) < C.KRAKEN_CHANCE) {
+    state.event = { kind: "kraken", stage: "warning", remaining: C.KRAKEN_WARNING_S, tapsLeft: C.KRAKEN_TAPS };
+    events.push({ kind: "event_start", event: "kraken" });
+    return;
+  }
 
   const canStorm = state.boats.length >= C.STORM_MIN_BOATS;
   const kind = canStorm && nextRand(state) < 0.5 ? "storm" : "frenzy";
@@ -544,6 +590,47 @@ export function unlockZone(state: GameState, events: SimEvent[] = []): ActionRes
   return { ok: true };
 }
 
+/** Tap al Kraken: cada golpe cuenta; al completarlos, huye y suelta el botín. */
+export function tapKraken(state: GameState, events: SimEvent[] = []): ActionResult {
+  const ev = state.event;
+  if (!ev || ev.kind !== "kraken" || ev.stage !== "active" || ev.tapsLeft <= 0) {
+    return { ok: false, reason: "no_kraken" };
+  }
+  ev.tapsLeft--;
+  state.stats.taps++;
+  if (ev.tapsLeft > 0) return { ok: true };
+  // Ahuyentado: botín gordo + posible reliquia; el evento se cierra ya.
+  const reward = Math.max(1, incomeRate(state) * C.KRAKEN_REWARD_SECONDS);
+  gainMoney(state, reward, events);
+  state.stats.krakensRepelled++;
+  if (nextRand(state) < C.KRAKEN_RELIC_CHANCE) grantRelic(state, events);
+  events.push({ kind: "kraken_repelled", amount: reward });
+  events.push({ kind: "event_end", event: "kraken" });
+  state.event = null;
+  state.eventT = C.EVENT_INTERVAL_MIN_S + nextRand(state) * (C.EVENT_INTERVAL_MAX_S - C.EVENT_INTERVAL_MIN_S);
+  return { ok: true, gained: reward };
+}
+
+/** El paquete del pescador: regalo diario con racha (reloj de pared). */
+export function claimGift(state: GameState, now: number, events: SimEvent[] = []): { day: number; amount: number } | null {
+  const hoursSince = (now - state.gift.lastAt) / 3_600_000;
+  if (state.gift.lastAt > 0 && hoursSince < C.GIFT_MIN_HOURS) return null;
+  const keepStreak = state.gift.lastAt > 0 && hoursSince <= C.GIFT_STREAK_HOURS;
+  state.gift.streak = keepStreak ? state.gift.streak + 1 : 1;
+  state.gift.lastAt = now;
+  if (state.gift.streak > state.stats.bestGiftStreak) state.stats.bestGiftStreak = state.gift.streak;
+  const amount = giftAmount(state, state.gift.streak);
+  gainMoney(state, amount, events);
+  tickAchievements(state, events);
+  return { day: state.gift.streak, amount };
+}
+
+/** Renombra el puerto (se recorta y limpia; vacío = vuelve al nombre por defecto). */
+export function renamePort(state: GameState, name: string): ActionResult {
+  state.portName = name.replace(/\s+/g, " ").trim().slice(0, C.PORT_NAME_MAX);
+  return { ok: true };
+}
+
 /** Tap al banco de peces: burst de ingresos inmediato. */
 export function tapShoal(state: GameState, events: SimEvent[] = []): ActionResult {
   const ev = state.event;
@@ -626,6 +713,7 @@ export function doPrestige(state: GameState, now: number): ActionResult {
   state.reputation += gain;
   state.repEarned += gain;
   state.prestiges++;
+  if (gain > state.stats.bestRepGain) state.stats.bestRepGain = gain;
   state.money = 0;
   state.lifetime = 0;
   state.boats = [];

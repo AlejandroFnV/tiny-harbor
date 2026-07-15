@@ -214,7 +214,7 @@ describe("migración v3 → v4", () => {
   it("contenido nuevo: 8 tiers, 8 zonas y 30 especies coherentes", () => {
     expect(C.BOAT_TIERS.length).toBe(8);
     expect(C.ZONES.length).toBe(8);
-    expect(C.SPECIES.length).toBe(30);
+    expect(C.SPECIES.length).toBe(34); // 30 + 4 leyendas (v1.5)
     // Toda especie apunta a una zona existente; toda zona tiene especies.
     for (const sp of C.SPECIES) expect(sp.zone).toBeLessThan(C.ZONES.length);
     for (let z = 0; z < C.ZONES.length; z++) {

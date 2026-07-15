@@ -38,6 +38,8 @@ export interface UIActions {
   upgradeDock(): void;
   upgradeLonja(): void;
   startExpedition(defIndex: number): void;
+  renamePort(name: string): void;
+  shareCard(): void;
   hireManager(): void;
   hireSkipper(index: number): void;
   buyLegacy(branch: C.LegacyBranch): void;
@@ -217,6 +219,8 @@ export class UI {
       case "up-dock": this.act.upgradeDock(); break;
       case "up-lonja": this.act.upgradeLonja(); break;
       case "start-expedition": this.act.startExpedition(Number(el.dataset.exp)); break;
+      case "rename-port": this.showRenameModal(); break;
+      case "share-card": this.act.shareCard(); break;
       case "hire-manager": this.act.hireManager(); break;
       case "hire-skipper": this.act.hireSkipper(Number(el.dataset.index)); break;
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
@@ -416,8 +420,11 @@ export class UI {
       const fishes = species
         .map((sp) => {
           const disc = s.discovered.includes(sp.id);
-          return `<img class="fish-thumb ${disc ? "" : "unknown"}" src="${speciesThumbURL(sp.id, disc)}"
-            alt="${disc ? sp.name : "especie sin descubrir"}" title="${disc ? sp.name : "???"}">`;
+          const legend = sp.rarity === "leyenda";
+          // Las leyendas sin descubrir enseñan su PISTA, no un "???": el cuándo es el juego.
+          const title = disc ? sp.name : legend && sp.hint ? `LEYENDA — ${sp.hint}` : "???";
+          return `<img class="fish-thumb ${disc ? "" : "unknown"} ${legend ? "legend" : ""}" src="${speciesThumbURL(sp.id, disc)}"
+            alt="${disc ? sp.name : "especie sin descubrir"}" title="${title}">`;
         })
         .join("");
       html += `<div class="zone-item ${cls}">
@@ -532,13 +539,31 @@ export class UI {
     }
     html += `</div>`;
 
+    const port = s.portName || "Tiny Harbor";
     html += `<div class="section-title">TU HISTORIA</div>
+    <div class="card port-name-card">
+      <div class="info"><div class="name">Puerto de ${port}</div>
+      <div class="desc">El nombre sale en tu tarjeta de capitán.</div></div>
+      <button class="btn" data-action="rename-port">Renombrar</button>
+    </div>
     <div class="stat-grid">
       <div class="stat"><b>${formatMoney(s.totalEarned)}</b><span>ganado en total</span></div>
       <div class="stat"><b>${s.prestiges}</b><span>puertos vendidos</span></div>
       <div class="stat"><b>×${prestigeMult(s).toFixed(2)}</b><span>multiplicador de reputación</span></div>
       <div class="stat"><b>${formatDuration(s.playTime)}</b><span>al timón esta vuelta</span></div>
     </div>
+    <div class="section-title">BITÁCORA DE RÉCORDS</div>
+    <div class="stat-grid">
+      <div class="stat"><b>${formatMoney(s.stats.bestLifetime)}</b><span>mejor vuelta</span></div>
+      <div class="stat"><b>${s.stats.bestRepGain > 0 ? "+" + s.stats.bestRepGain : "—"}</b><span>mejor venta (rep)</span></div>
+      <div class="stat"><b>${s.stats.bestCombo || "—"}</b><span>racha récord</span></div>
+      <div class="stat"><b>${s.stats.goldenCatches}</b><span>capturas doradas</span></div>
+      <div class="stat"><b>${s.stats.driftsTapped}</b><span>cofres pescados</span></div>
+      <div class="stat"><b>${s.stats.expeditionsDone}</b><span>expediciones</span></div>
+      <div class="stat"><b>${s.stats.krakensRepelled}</b><span>krakens ahuyentados</span></div>
+      <div class="stat"><b>${s.stats.bestGiftStreak || "—"}</b><span>días seguidos (récord)</span></div>
+    </div>
+    <button class="btn gold" data-action="share-card" style="margin-top:10px;width:100%">Tarjeta de capitán (compartir)</button>
     <button class="btn" data-action="reset" style="margin-top:6px;font-size:12.5px;opacity:.75">Borrar partida</button>`;
     return html;
   }
@@ -743,11 +768,23 @@ export class UI {
   private renderEventBanner(s: GameState): void {
     const slot = document.getElementById("event-slot")!;
     const ev = s.event;
-    const key = ev ? `${ev.kind}:${ev.stage}` : "";
+    const key = ev ? `${ev.kind}:${ev.stage}${ev.kind === "kraken" ? ":" + ev.tapsLeft : ""}` : "";
     if (key !== this.lastEventKey) {
       this.lastEventKey = key;
       if (!ev) {
         slot.innerHTML = "";
+      } else if (ev.kind === "kraken" && ev.stage === "warning") {
+        slot.innerHTML = `<div class="event-banner storm">
+          <h3>Algo ENORME se mueve bajo la flota…</h3>
+          <p>Prepara los dedos.</p>
+          <div class="timer"><i></i></div>
+        </div>`;
+      } else if (ev.kind === "kraken") {
+        slot.innerHTML = `<div class="event-banner storm kraken">
+          <h3>¡EL KRAKEN!</h3>
+          <p>¡Tócalo <b>${ev.tapsLeft}</b> veces más o se llevará la carga!</p>
+          <div class="timer"><i></i></div>
+        </div>`;
       } else if (ev.kind === "storm" && ev.stage === "warning") {
         slot.innerHTML = `<div class="event-banner storm">
           <h3>Tormenta a la vista</h3>
@@ -775,7 +812,11 @@ export class UI {
       const bar = slot.querySelector<HTMLElement>(".timer i");
       if (bar) {
         const total =
-          ev.kind === "frenzy" ? C.FRENZY_DURATION_S : ev.stage === "warning" ? C.STORM_WARNING_S : C.STORM_DURATION_S;
+          ev.kind === "frenzy"
+            ? C.FRENZY_DURATION_S
+            : ev.kind === "kraken"
+              ? ev.stage === "warning" ? C.KRAKEN_WARNING_S : C.KRAKEN_DURATION_S
+              : ev.stage === "warning" ? C.STORM_WARNING_S : C.STORM_DURATION_S;
         bar.style.width = `${Math.max(0, (ev.remaining / total) * 100)}%`;
       }
     }
@@ -863,6 +904,45 @@ export class UI {
     document.getElementById("prestige-yes")!.addEventListener("click", () => {
       this.closeModal();
       this.act.prestige();
+    }, { once: true });
+  }
+
+  private showRenameModal(): void {
+    const s = this.getState();
+    const slot = document.getElementById("modal-slot")!;
+    slot.innerHTML = `<div class="modal-backdrop"><div class="modal">
+      <h2>Nombre del puerto</h2>
+      <p>Puerto de…</p>
+      <input type="text" id="port-name-input" maxlength="${C.PORT_NAME_MAX}" value="${s.portName.replace(/"/g, "&quot;")}"
+        placeholder="Tiny Harbor" autocomplete="off">
+      <div class="row">
+        <button class="btn" data-action="close-modal">Cancelar</button>
+        <button class="btn primary" id="rename-yes">Guardar</button>
+      </div>
+    </div></div>`;
+    const input = document.getElementById("port-name-input") as HTMLInputElement;
+    input.focus();
+    document.getElementById("rename-yes")!.addEventListener("click", () => {
+      this.act.renamePort(input.value);
+      this.closeModal();
+      this.renderTab();
+    }, { once: true });
+  }
+
+  /** El paquete del pescador: modal de regalo diario con racha. */
+  showGiftModal(day: number, amount: number, onClaim: () => void): void {
+    const slot = document.getElementById("modal-slot")!;
+    slot.innerHTML = `<div class="modal-backdrop"><div class="modal">
+      <h2>El paquete del pescador</h2>
+      <div class="chest"><div class="coins-glow"></div><div class="lid"></div><div class="lock"></div><div class="box"></div></div>
+      <p>Día <b>${day}</b> seguido en el puerto${day >= 7 ? " — sal en las venas" : ""}.</p>
+      <div class="big-earn">+${formatMoney(amount)}</div>
+      ${day > 1 ? `<p style="font-size:12.5px;opacity:.8">La racha crece el regalo. Mañana: día ${day + 1}.</p>` : `<p style="font-size:12.5px;opacity:.8">Vuelve mañana: la racha hace crecer el regalo.</p>`}
+      <div class="row"><button class="btn primary" id="gift-btn">Recoger</button></div>
+    </div></div>`;
+    document.getElementById("gift-btn")!.addEventListener("click", () => {
+      this.closeModal();
+      onClaim();
     }, { once: true });
   }
 

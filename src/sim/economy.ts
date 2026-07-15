@@ -44,9 +44,36 @@ export function marketMult(state: GameState): number {
   return state.market.mult;
 }
 
-/** Bonus permanente de la pescadoteca (+1% por especie descubierta). */
+const LEGEND_IDS = new Set(C.SPECIES.filter((s) => s.rarity === "leyenda").map((s) => s.id));
+
+/** Bonus permanente de la pescadoteca (+1% por especie, +5% por leyenda). */
 export function speciesMult(state: GameState): number {
-  return 1 + state.discovered.length * C.SPECIES_INCOME_BONUS;
+  let m = 1;
+  for (const id of state.discovered) {
+    m += LEGEND_IDS.has(id) ? C.LEGEND_INCOME_BONUS : C.SPECIES_INCOME_BONUS;
+  }
+  return m;
+}
+
+/** ¿Es de día/noche para la sim? Misma ventana que usa el render (campana). */
+export function dayFraction(state: GameState): number {
+  return (state.playTime % C.DAY_CYCLE_S) / C.DAY_CYCLE_S;
+}
+
+export function isNight(state: GameState): boolean {
+  const t = dayFraction(state);
+  return t >= 0.58 && t < 0.95;
+}
+
+export function isMidday(state: GameState): boolean {
+  const t = dayFraction(state);
+  return t >= 0.15 && t <= 0.4;
+}
+
+/** Regalo diario: cuánto toca hoy (según racha e ingresos actuales). */
+export function giftAmount(state: GameState, streak: number): number {
+  const mult = Math.min(C.GIFT_STREAK_CAP, 1 + C.GIFT_STREAK_STEP * (streak - 1));
+  return Math.ceil(Math.max(C.GIFT_FLOOR, incomeRate(state) * C.GIFT_INCOME_SECONDS) * mult);
 }
 
 /** Bonus permanente de logros (+2% por logro). */

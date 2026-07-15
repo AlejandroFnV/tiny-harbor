@@ -17,6 +17,7 @@ import type { GameState } from "./types";
  * v4 → v5: rebalance del prestigio (sqrt→cbrt): la reputación vieja se convierte a la
  *          escala nueva (rep^(2/3), mismo lifetime equivalente); lonja, racha y stats nuevas.
  * v5 → v6: mercado de la lonja, cofres a la deriva, expediciones y reliquias.
+ * v6 → v7: kraken, leyendas, regalo diario, nombre del puerto y récords.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -93,6 +94,18 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof stats.soldHigh !== "number") stats.soldHigh = 0;
     raw.stats = stats;
     raw.version = 6;
+  },
+  6: (raw) => {
+    if (typeof raw.portName !== "string") raw.portName = "";
+    raw.gift = { lastAt: 0, streak: 0 };
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.krakensRepelled !== "number") stats.krakensRepelled = 0;
+    // El mejor lifetime conocido hasta ahora es el de la vuelta actual.
+    if (typeof stats.bestLifetime !== "number") stats.bestLifetime = typeof raw.lifetime === "number" ? raw.lifetime : 0;
+    if (typeof stats.bestRepGain !== "number") stats.bestRepGain = 0;
+    if (typeof stats.bestGiftStreak !== "number") stats.bestGiftStreak = 0;
+    raw.stats = stats;
+    raw.version = 7;
   },
 };
 

@@ -285,6 +285,29 @@ export const DRIFT_CHESTS: Sprite[] = [
   ]),
 ];
 
+// --- kraken (tentáculo; se dibujan varios con fase distinta) -----------------------
+export const KRAKEN_TENTACLE = sprite("tentacle", { I: "ink", R: "roof", C: "coral", F: "foam" }, [
+  "....RR....",
+  "...RRRR...",
+  "..RRCRR...",
+  "..RRRR....",
+  ".RRCRR....",
+  ".RRRR.....",
+  ".RRRR.....",
+  ".RRCRR....",
+  "..RRRR....",
+  "..RRRRR...",
+  "...RRRRR..",
+  "....RRRR..",
+  "..FF.FF.F.",
+]);
+
+export const KRAKEN_EYES = sprite("krakenEyes", { M: "must", I: "ink" }, [
+  "MM....MM",
+  "MIM..MIM",
+  "MM....MM",
+]);
+
 // --- ballena ambiental (silueta que cruza el mar de fondo) ------------------------
 export const WHALE = sprite("whale", { I: "ink", F: "foam" }, [
   "......................",

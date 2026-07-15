@@ -320,6 +320,37 @@ body {
   border-radius: 3px;
 }
 
+/* Kraken: el banner tiembla — esto va en serio. */
+.event-banner.kraken {
+  animation: kraken-shake 0.35s linear infinite;
+}
+
+@keyframes kraken-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+/* Leyendas de la pescadoteca: borde dorado, descubiertas o no. */
+.fish-thumb.legend {
+  outline: 2px solid #b07d18;
+  outline-offset: 1px;
+  border-radius: 3px;
+}
+
+/* Input del nombre del puerto (modal). */
+.modal input[type="text"] {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 700;
+  border: var(--border);
+  border-radius: var(--r);
+  background: var(--paper);
+  color: var(--ink);
+  margin: 6px 0 4px;
+}
+
 /* Hold-to-repeat en táctil: sin esto, el navegador convierte la pulsación
    larga en gesto de scroll (pointercancel) o selección y la ráfaga muere. */
 .ups .btn,

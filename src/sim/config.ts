@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -278,6 +278,22 @@ export const FRENZY_MULT = 2;
 export const FRENZY_TAP_SECONDS = 1.5;
 export const FRENZY_MAX_TAPS = 12;
 
+/** El Kraken: solo en zonas profundas y con flota. Tap-frenesí para ahuyentarlo. */
+export const KRAKEN_MIN_ZONE = 5; // La Fosa
+export const KRAKEN_MIN_BOATS = 3;
+/** Prob. de que el evento sea kraken (si se cumplen las condiciones). */
+export const KRAKEN_CHANCE = 0.22;
+export const KRAKEN_WARNING_S = 6;
+export const KRAKEN_DURATION_S = 14;
+/** Taps necesarios para ahuyentarlo. */
+export const KRAKEN_TAPS = 18;
+/** Botín al ahuyentarlo = income × estos segundos. */
+export const KRAKEN_REWARD_SECONDS = 300;
+/** Prob. de reliquia extra al ahuyentarlo. */
+export const KRAKEN_RELIC_CHANCE = 0.3;
+/** Si escapa: fracción de carga que arranca a los barcos cargados. */
+export const KRAKEN_CARGO_LOSS = 0.35;
+
 /** Tormenta: ventana de decisión (s) y duración del efecto (s). */
 export const STORM_WARNING_S = 10;
 export const STORM_DURATION_S = 25;
@@ -317,14 +333,16 @@ export const ORDER_REWARD_FACTOR = 0.6;
 // ---------------------------------------------------------------------------
 // Pescadoteca (colección de especies, persiste entre prestigios)
 // ---------------------------------------------------------------------------
-export type SpeciesRarity = "comun" | "rara" | "epica";
+export type SpeciesRarity = "comun" | "rara" | "epica" | "leyenda";
 
 export interface SpeciesDef {
   id: string;
   name: string;
-  /** Zona (índice en ZONES) donde se puede descubrir. */
+  /** Zona (índice en ZONES) donde se puede descubrir. Las leyendas: en su zona O MÁS ALLÁ. */
   zone: number;
   rarity: SpeciesRarity;
+  /** Solo leyendas: pista visible en la pescadoteca (la condición vive en sim.ts). */
+  hint?: string;
 }
 
 /** Probabilidad de descubrimiento POR COBRO (solo especies de la zona actual aún no descubiertas). */
@@ -332,10 +350,13 @@ export const SPECIES_CHANCE: Record<SpeciesRarity, number> = {
   comun: 0.07,
   rara: 0.02,
   epica: 0.006,
+  leyenda: 0.014, // la puerta real es su condición, no la probabilidad
 };
 
 /** Bonus permanente de ingresos por especie descubierta (+1% cada una). */
 export const SPECIES_INCOME_BONUS = 0.01;
+/** Las leyendas valen +5% cada una. */
+export const LEGEND_INCOME_BONUS = 0.05;
 
 export const SPECIES: SpeciesDef[] = [
   // Bahía
@@ -376,6 +397,11 @@ export const SPECIES: SpeciesDef[] = [
   { id: "medusaeterna", name: "Medusa eterna", zone: 7, rarity: "comun" },
   { id: "pezremo", name: "Pez remo", zone: 7, rarity: "rara" },
   { id: "kraken", name: "Kraken", zone: 7, rarity: "epica" },
+  // Leyendas: solo aparecen si se cumple su condición (sim.ts). Desde su zona en adelante.
+  { id: "reysol", name: "Rey Sol", zone: 2, rarity: "leyenda", hint: "Solo se deja ver cuando el sol está en lo más alto" },
+  { id: "sierpe", name: "Sierpe de Tormenta", zone: 3, rarity: "leyenda", hint: "Solo muerde el anzuelo de quien faena bajo la tormenta" },
+  { id: "farolreal", name: "Pez Farol Real", zone: 4, rarity: "leyenda", hint: "Su luz solo se distingue en plena noche" },
+  { id: "fantasma", name: "El Fantasma Blanco", zone: 7, rarity: "leyenda", hint: "Solo aparece ante manos que no paran: racha de 10 o más" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -449,6 +475,21 @@ export const LEGACY_FARO_OFFLINE_S = 2 * 3600;
 export const LEGACY_FARO_SPECIES = 0.35;
 
 // ---------------------------------------------------------------------------
+// El paquete del pescador (regalo diario con racha de días)
+// ---------------------------------------------------------------------------
+/** Horas mínimas entre regalos y horas máximas para conservar la racha. */
+export const GIFT_MIN_HOURS = 20;
+export const GIFT_STREAK_HOURS = 48;
+/** Regalo = max(suelo, income × segundos) × mult de racha (cap). */
+export const GIFT_FLOOR = 500;
+export const GIFT_INCOME_SECONDS = 1800;
+export const GIFT_STREAK_STEP = 0.25;
+export const GIFT_STREAK_CAP = 3;
+
+/** Nombre del puerto (personalizable): longitud máxima. */
+export const PORT_NAME_MAX = 18;
+
+// ---------------------------------------------------------------------------
 // Logros (permanentes, sobreviven al prestigio; cada uno +2% de ingresos)
 // ---------------------------------------------------------------------------
 export const ACHIEVEMENT_INCOME_BONUS = 0.02;
@@ -487,6 +528,11 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "reliquias6", name: "Vitrina del pecio", desc: "Reúne 6 reliquias" },
   { id: "reliquias12", name: "Museo del puerto", desc: "Reúne TODAS las reliquias" },
   { id: "lonjero", name: "Olfato de lonjero", desc: "Cobra 30 veces con el precio alto (×1.35+)" },
+  { id: "kraken1", name: "A cañonazos de dedo", desc: "Ahuyenta al Kraken" },
+  { id: "kraken5", name: "Terror de terrores", desc: "Ahuyenta al Kraken 5 veces" },
+  { id: "leyenda1", name: "Cuento de taberna", desc: "Pesca tu primera leyenda" },
+  { id: "leyendas4", name: "Las cuatro leyendas", desc: "Pesca las 4 leyendas del mar" },
+  { id: "fiel7", name: "Sal en las venas", desc: "Vuelve al puerto 7 días seguidos" },
 ];
 
 // ---------------------------------------------------------------------------

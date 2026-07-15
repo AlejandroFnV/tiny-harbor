@@ -23,6 +23,8 @@ import {
   GULL_A,
   GULL_B,
   HOUSE,
+  KRAKEN_EYES,
+  KRAKEN_TENTACLE,
   LAMP,
   LIGHTHOUSE,
   MARKET,
@@ -47,7 +49,7 @@ interface Gull {
 }
 
 export interface HitResult {
-  type: "boat" | "shoal" | "drift";
+  type: "boat" | "shoal" | "drift" | "kraken";
   boatId?: number;
   x: number;
   y: number;
@@ -80,6 +82,7 @@ export class Renderer {
   private boatRects = new Map<number, { x: number; y: number; r: number }>();
   private shoalPos = { x: 0, y: 0 };
   private driftPos = { x: 0, y: 0 };
+  private krakenPos = { x: 0, y: 0 };
   private whale = { x: -30, dir: 1, active: false, timer: 40 };
   private lastTownKey = "";
   private lastTownCount = 0;
@@ -178,6 +181,12 @@ export class Renderer {
       const dy = pxY - this.shoalPos.y;
       const r = 62;
       if (dx * dx + dy * dy < r * r) return { type: "shoal", x: this.shoalPos.x, y: this.shoalPos.y };
+    }
+    if (state.event?.kind === "kraken" && state.event.stage === "active") {
+      const dx = pxX - this.krakenPos.x;
+      const dy = pxY - this.krakenPos.y;
+      const r = 85;
+      if (dx * dx + dy * dy < r * r) return { type: "kraken", x: this.krakenPos.x, y: this.krakenPos.y };
     }
     if (state.drift) {
       const dx = pxX - this.driftPos.x;
@@ -282,6 +291,7 @@ export class Renderer {
 
     this.drawDrift(g, state, pal);
     this.drawFrenzy(g, state, dt, pal);
+    this.drawKraken(g, state, pal);
     this.clientVisible = state.order !== null;
     this.drawPier(g, pal, step, night);
 
@@ -562,6 +572,66 @@ export class Renderer {
       g.fillStyle = pal.white;
       g.fillRect(cx - 1, cy - spr.h - 1, 1, 1);
       g.fillRect(cx + 2, cy - spr.h + 1, 1, 1);
+    }
+  }
+
+  // --- kraken: tentáculos saliendo del agua, tapeables --------------------------------
+  private drawKraken(g: CanvasRenderingContext2D, state: GameState, pal: PixelPalette): void {
+    const ev = state.event;
+    if (ev?.kind !== "kraken") return;
+    const cx = Math.round(this.aw * 0.5);
+    const cy = Math.round(this.horizonY + this.seaH * 0.5);
+    this.krakenPos = { x: cx * this.px, y: cy * this.px };
+
+    if (ev.stage === "warning") {
+      // Sombra creciendo bajo el agua + burbujas: algo enorme sube.
+      const grow = 1 - ev.remaining / 6;
+      g.fillStyle = pal.roof;
+      g.globalAlpha = 0.25 + grow * 0.3;
+      const rx = Math.round(14 + grow * 16);
+      const ry = Math.round(5 + grow * 5);
+      g.beginPath();
+      g.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      g.fill();
+      g.globalAlpha = 1;
+      if (Math.sin(this.t * 9) > 0.4) {
+        g.fillStyle = pal.foam;
+        g.fillRect(cx - 6 + (Math.floor(this.t * 7) % 12), cy - 2, 1, 1);
+        g.fillRect(cx + 3 - (Math.floor(this.t * 5) % 9), cy + 2, 1, 1);
+      }
+      return;
+    }
+
+    // Activo: tentáculos oscilando + ojos + anillo de "¡tócalo!".
+    const spr = KRAKEN_TENTACLE;
+    const arms = [
+      { dx: -16, ph: 0, flip: false },
+      { dx: -2, ph: 1.4, flip: true },
+      { dx: 12, ph: 2.7, flip: false },
+    ];
+    for (const a of arms) {
+      const rise = Math.round(Math.sin(this.t * 2.2 + a.ph) * 2);
+      const img = raster(spr, 0, { flip: a.flip });
+      g.drawImage(img, cx + a.dx, cy - spr.h + 3 + rise);
+    }
+    // Espuma en la base: el agua hierve.
+    g.fillStyle = pal.foam;
+    for (let i = -14; i <= 18; i += 4) {
+      if (Math.sin(this.t * 6 + i) > 0) g.fillRect(cx + i, cy + 2 + (i % 2), 2, 1);
+    }
+    // Ojos asomando entre los tentáculos.
+    if (Math.sin(this.t * 0.9) > -0.6) {
+      g.drawImage(raster(KRAKEN_EYES, 0), cx - Math.floor(KRAKEN_EYES.w / 2) + 2, cy - 4);
+    }
+    // Anillo rojo de atención (más urgente que el del banco de peces).
+    const rx = 26;
+    const ry = 10;
+    g.fillStyle = pal.coral;
+    const spin = this.t * 1.6;
+    for (let i = 0; i < 18; i++) {
+      if (i % 2 === 0) continue;
+      const a = (i / 18) * Math.PI * 2 + spin;
+      g.fillRect(cx + Math.round(Math.cos(a) * rx) - 1, cy + Math.round(Math.sin(a) * ry), 2, 1);
     }
   }
 

@@ -56,7 +56,7 @@ export interface Mission {
   text: string;
 }
 
-export type ActiveEventKind = "frenzy" | "storm";
+export type ActiveEventKind = "frenzy" | "storm" | "kraken";
 
 /** Pedido de la lonja: cliente pide X de pesca en T segundos por un bono. */
 export interface ActiveOrder {
@@ -78,7 +78,7 @@ export interface ActiveEvent {
   stage: "warning" | "active";
   /** Tormenta: decisión tomada. */
   choice?: "shelter" | "risk";
-  /** Frenzy: taps que quedan con burst. */
+  /** Frenzy: taps que quedan con burst. Kraken: taps que FALTAN para ahuyentarlo. */
   tapsLeft: number;
 }
 
@@ -144,6 +144,12 @@ export interface GameState {
   /** Reliquias del pecio (ids). PERSISTEN entre prestigios. */
   relics: string[];
 
+  /** Nombre del puerto (lo pone el jugador; sale en la tarjeta de compartir). */
+  portName: string;
+
+  /** Paquete del pescador: reloj de pared del último regalo y racha de días. */
+  gift: { lastAt: number; streak: number };
+
   /** Reloj de pared (ms epoch) de la última vez que se vio el juego (offline calc). */
   lastSeen: number;
   /** Tiempo total jugado (s, esta vuelta). */
@@ -164,6 +170,11 @@ export interface GameState {
     driftsTapped: number;
     expeditionsDone: number;
     soldHigh: number;
+    krakensRepelled: number;
+    /** Récords para la bitácora. */
+    bestLifetime: number;
+    bestRepGain: number;
+    bestGiftStreak: number;
   };
   rngSeed: number;
 }
@@ -188,4 +199,6 @@ export type SimEvent =
   | { kind: "drift_reward"; drift: number; amount: number }
   | { kind: "drift_gone" }
   | { kind: "relic_found"; id: string }
-  | { kind: "expedition_done"; boatId: number; amount: number };
+  | { kind: "expedition_done"; boatId: number; amount: number }
+  | { kind: "kraken_repelled"; amount: number }
+  | { kind: "kraken_escaped"; lost: number };
