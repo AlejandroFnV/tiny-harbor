@@ -6,11 +6,14 @@
 
 import * as C from "../sim/config";
 import {
+  albaUnlocked,
   berths,
   boatCost,
+  buyerGain,
   canPrestige,
   capUpgradeCost,
   cargoValue,
+  completionPct,
   dockCost,
   expeditionBooty,
   expeditionDuration,
@@ -21,10 +24,13 @@ import {
   managerCost,
   nextZone,
   offlineCapSeconds,
+  ownsAlba,
   prestigeGain,
   prestigeMult,
+  prestigeOffers,
   prestigeThreshold,
   speedUpgradeCost,
+  vigiaCost,
   zoneCost,
 } from "../sim/economy";
 import { formatDuration, formatMoney } from "../sim/format";
@@ -44,7 +50,8 @@ export interface UIActions {
   hireSkipper(index: number): void;
   buyLegacy(branch: C.LegacyBranch): void;
   unlockZone(): void;
-  prestige(): void;
+  buyVigia(): void;
+  prestige(buyerId: string): void;
   resolveStorm(choice: "shelter" | "risk"): void;
   collectAll(): void;
   acceptOrder(): void;
@@ -113,6 +120,7 @@ export class UI {
           <div class="amount"><span id="money">0</span></div>
           <div class="rate" id="rate">0/s</div>
           <div class="market-chip" id="market-chip" title="Precio de la lonja: sube y baja solo. Cobra caro."><span id="market-arrow">→</span> lonja <b id="market-val">×1.00</b></div>
+          <div class="vigia-chip" id="vigia-chip" hidden title="La Torre del Vigía otea el horizonte"></div>
         </div>
         <div class="top-actions">
           <div class="combo-stamp" id="combo-stamp" hidden><span id="combo-val">×1.0</span><small>RACHA</small></div>
@@ -225,6 +233,7 @@ export class UI {
       case "hire-skipper": this.act.hireSkipper(Number(el.dataset.index)); break;
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
       case "unlock-zone": this.act.unlockZone(); break;
+      case "buy-vigia": this.act.buyVigia(); break;
       case "prestige": this.confirmPrestige(); break;
       case "reset": this.confirmReset(); break;
       case "collect-all": this.act.collectAll(); break;
@@ -283,6 +292,7 @@ export class UI {
     const reach = Math.max(s.money * 6, s.lifetime) + 100;
     let shownLocked = false;
     C.BOAT_TIERS.forEach((t, tier) => {
+      if (tier === C.ALBA_TIER) return; // El Alba tiene su propia vitrina abajo
       const owned = s.boats.filter((b) => b.tier === tier).length;
       const visible = owned > 0 || t.baseCost <= reach;
       if (!visible && shownLocked) return;
@@ -303,6 +313,20 @@ export class UI {
         </button>
       </div>`;
     });
+
+    // El Alba: la vitrina de leyenda (solo con las 4 leyendas pescadas).
+    if (albaUnlocked(s)) {
+      const alba = C.BOAT_TIERS[C.ALBA_TIER];
+      html += `<div class="card alba-card">${boatThumb(C.ALBA_TIER)}
+        <div class="info">
+          <div class="name">${alba.name} <small>barco de leyenda</small></div>
+          <div class="desc">Único. Inmune a tormentas y al Kraken; los peces raros lo buscan (especies ×${C.ALBA_SPECIES_MULT}).</div>
+        </div>
+        ${ownsAlba(s)
+          ? `<span class="legacy-max">BOTADO</span>`
+          : `<button class="btn gold" data-action="buy-boat" data-tier="${C.ALBA_TIER}">Botar<span class="sub" data-cost-label></span></button>`}
+      </div>`;
+    }
 
     html += `<div class="section-title">TU FLOTA (${s.boats.length}/${berths(s)} amarres)</div>`;
     for (const b of s.boats) {
@@ -349,6 +373,13 @@ export class UI {
       <div class="info"><div class="name">Gestor del puerto${mLvl > 0 ? ` <small>nv.${mLvl}</small>` : ""}</div>
       <div class="desc">${mDesc}</div></div>
       ${mLvl >= C.MANAGER_MAX_LVL ? "" : `<button class="btn primary" data-action="hire-manager">${mLvl === 0 ? "Contratar" : "Subir"}<span class="sub" data-cost-label></span></button>`}
+    </div>`;
+
+    // La Torre del Vigía: anticipación comprable (se pierde al vender).
+    html += `<div class="card">
+      <div class="info"><div class="name">Torre del Vigía${s.vigia ? " <small>oteando</small>" : ""}</div>
+      <div class="desc">${s.vigia ? "El vigía canta lo que viene: eventos y cofres, bajo el dinero." : "Un vigía que anticipa eventos y cofres a la deriva. Se pierde al vender el puerto."}</div></div>
+      ${s.vigia ? "" : `<button class="btn primary" data-action="buy-vigia">Construir<span class="sub" data-cost-label></span></button>`}
     </div>`;
 
     // La Lonja: sumidero infinito — siempre hay algo que comprar.
@@ -540,7 +571,10 @@ export class UI {
     html += `</div>`;
 
     const port = s.portName || "Tiny Harbor";
-    html += `<div class="section-title">TU HISTORIA</div>
+    const pctDone = completionPct(s);
+    html += `<div class="section-title">PUERTO COMPLETADO <span class="rep-balance">${pctDone}%</span></div>
+    <div class="completion-bar"><i style="width:${pctDone}%"></i></div>
+    <div class="section-title">TU HISTORIA</div>
     <div class="card port-name-card">
       <div class="info"><div class="name">Puerto de ${port}</div>
       <div class="desc">El nombre sale en tu tarjeta de capitán.</div></div>
@@ -612,6 +646,12 @@ export class UI {
       const cost = lonjaCost(s);
       lonjaBtn.querySelector("[data-cost-label]")!.textContent = formatMoney(cost);
       lonjaBtn.disabled = s.money < cost;
+    }
+    const vigiaBtn = document.querySelector<HTMLButtonElement>("[data-action='buy-vigia']");
+    if (vigiaBtn) {
+      const cost = vigiaCost(s);
+      vigiaBtn.querySelector("[data-cost-label]")!.textContent = formatMoney(cost);
+      vigiaBtn.disabled = s.money < cost;
     }
     const mgrBtn = document.querySelector<HTMLButtonElement>("[data-action='hire-manager']");
     if (mgrBtn) {
@@ -709,6 +749,16 @@ export class UI {
     }
     if (show) {
       document.getElementById("rep-val")!.textContent = `×${prestigeMult(s).toFixed(2)}`;
+    }
+
+    // El vigía canta lo que viene (chip bajo el dinero).
+    const vChip = document.getElementById("vigia-chip")!;
+    if (vChip.hidden === s.vigia) vChip.hidden = !s.vigia;
+    if (s.vigia) {
+      const evTxt = s.event ? "¡evento AHORA!" : `evento ~${Math.ceil(s.eventT)}s`;
+      const driftTxt = s.drift ? "¡cofre al agua!" : s.playTime < 300 ? "" : ` · cofre ~${Math.ceil(s.driftT)}s`;
+      const txt = `vigía: ${evTxt}${driftTxt}`;
+      if (vChip.textContent !== txt) vChip.textContent = txt;
     }
 
     // Sello de racha (combo de cobro manual): visible desde el 2º eslabón.
@@ -888,23 +938,32 @@ export class UI {
   private confirmPrestige(): void {
     const s = this.getState();
     if (!canPrestige(s)) return;
-    const gain = prestigeGain(s);
+    const offers = prestigeOffers(s);
     const slot = document.getElementById("modal-slot")!;
-    const newMult = 1 + Math.pow(s.repEarned + gain, C.PRESTIGE_MULT_CURVE) * C.PRESTIGE_MULT_PER_REP;
-    slot.innerHTML = `<div class="modal-backdrop"><div class="modal">
-      <h2>¿Vender el puerto?</h2>
-      <p>Ganas <b>+${gain} de reputación</b> (ingresos ×${prestigeMult(s).toFixed(2)} → <b>×${newMult.toFixed(2)}</b> para siempre).<br>
-      Pierdes: barcos, patrones, mejoras, muelle, lonja, gestor y zonas de esta vuelta.<br>
-      Conservas: pescadoteca, logros y árbol de legado. El próximo puerto pedirá ${formatMoney(C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, s.prestiges + 1))} para venderse.</p>
-      <div class="row">
-        <button class="btn" data-action="close-modal">Todavía no</button>
-        <button class="btn gold" id="prestige-yes">Vender</button>
-      </div>
+    const cards = offers
+      .map((b) => {
+        const gain = buyerGain(s, b.id);
+        const newMult = 1 + Math.pow(s.repEarned + gain, C.PRESTIGE_MULT_CURVE) * C.PRESTIGE_MULT_PER_REP;
+        return `<button class="buyer-card ${b.id === "naviera" ? "" : "special"}" data-buyer="${b.id}">
+          <span class="bname">${b.name}</span>
+          <span class="bdesc">${b.desc}</span>
+          <span class="bgain">+${gain} rep → ×${newMult.toFixed(2)}</span>
+        </button>`;
+      })
+      .join("");
+    slot.innerHTML = `<div class="modal-backdrop"><div class="modal buyers-modal">
+      <h2>¿A quién le vendes el puerto?</h2>
+      <p>Pierdes: barcos, patrones, mejoras, muelle, lonja, vigía, gestor y zonas.<br>
+      Conservas: pescadoteca, reliquias, logros y legado. El próximo puerto pedirá ${formatMoney(C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, s.prestiges + 1))}.</p>
+      ${cards}
+      <div class="row"><button class="btn" data-action="close-modal">Todavía no</button></div>
     </div></div>`;
-    document.getElementById("prestige-yes")!.addEventListener("click", () => {
-      this.closeModal();
-      this.act.prestige();
-    }, { once: true });
+    slot.querySelectorAll<HTMLButtonElement>(".buyer-card").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.closeModal();
+        this.act.prestige(btn.dataset.buyer!);
+      }, { once: true });
+    });
   }
 
   private showRenameModal(): void {

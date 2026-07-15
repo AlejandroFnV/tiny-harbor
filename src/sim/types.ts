@@ -147,6 +147,9 @@ export interface GameState {
   /** Nombre del puerto (lo pone el jugador; sale en la tarjeta de compartir). */
   portName: string;
 
+  /** Torre del Vigía comprada esta vuelta (anticipa eventos y cofres). */
+  vigia: boolean;
+
   /** Paquete del pescador: reloj de pared del último regalo y racha de días. */
   gift: { lastAt: number; streak: number };
 
@@ -171,6 +174,7 @@ export interface GameState {
     expeditionsDone: number;
     soldHigh: number;
     krakensRepelled: number;
+    specialSales: number;
     /** Récords para la bitácora. */
     bestLifetime: number;
     bestRepGain: number;

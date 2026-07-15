@@ -5,8 +5,10 @@
 
 import * as C from "./config";
 import {
+  albaUnlocked,
   berths,
   boatCost,
+  buyerGain,
   canPrestige,
   capUpgradeCost,
   cargoValue,
@@ -27,10 +29,12 @@ import {
   lonjaCost,
   managerCost,
   nextZone,
-  prestigeGain,
+  ownsAlba,
+  prestigeOffers,
   skipperCost,
   speciesChanceMult,
   speedUpgradeCost,
+  vigiaCost,
   zoneCost,
 } from "./economy";
 import { bumpMission, rollMissions } from "./missions";
@@ -158,9 +162,9 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
       else {
         // Llega a puerto con la carga.
         boat.cargo = cargoValue(state, boat);
-        // Tormenta arriesgada: puede perder media carga (los lobos de mar, nunca).
+        // Tormenta arriesgada: puede perder media carga (lobos de mar y El Alba, nunca).
         if (stormActive && state.event!.choice === "risk" && boat.skipper?.trait !== "lobo"
-            && nextRand(state) < C.STORM_LOSS_CHANCE) {
+            && boat.tier !== C.ALBA_TIER && nextRand(state) < C.STORM_LOSS_CHANCE) {
           const lost = boat.cargo / 2;
           boat.cargo -= lost;
           events.push({ kind: "cargo_lost", boatId: boat.id, amount: lost });
@@ -348,6 +352,8 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   lonjero: (s) => s.stats.soldHigh >= 30,
   kraken1: (s) => s.stats.krakensRepelled >= 1,
   kraken5: (s) => s.stats.krakensRepelled >= 5,
+  alba1: (s) => s.boats.some((b) => b.tier === C.ALBA_TIER),
+  tratos3: (s) => s.stats.specialSales >= 3,
   leyenda1: (s) => s.discovered.some((id) => LEGEND_CONDS[id] !== undefined),
   leyendas4: (s) => Object.keys(LEGEND_CONDS).every((id) => s.discovered.includes(id)),
   fiel7: (s) => s.stats.bestGiftStreak >= 7,
@@ -405,7 +411,7 @@ function tickEvent(state: GameState, dt: number, events: SimEvent[]): void {
         if (ev.kind === "kraken" && ev.tapsLeft > 0) {
           let lost = 0;
           for (const b of state.boats) {
-            if (b.cargo > 0) {
+            if (b.cargo > 0 && b.tier !== C.ALBA_TIER) { // El Alba no se deja morder
               const bite = b.cargo * C.KRAKEN_CARGO_LOSS;
               b.cargo -= bite;
               lost += bite;
@@ -511,6 +517,11 @@ export function collectAll(state: GameState, events: SimEvent[] = []): ActionRes
 
 export function buyBoat(state: GameState, tier: number, events: SimEvent[] = []): ActionResult {
   if (tier < 0 || tier >= C.BOAT_TIERS.length) return { ok: false, reason: "bad_tier" };
+  // El Alba: exige las 4 leyendas y es único.
+  if (tier === C.ALBA_TIER) {
+    if (!albaUnlocked(state)) return { ok: false, reason: "locked" };
+    if (ownsAlba(state)) return { ok: false, reason: "unique" };
+  }
   if (state.boats.length >= berths(state)) return { ok: false, reason: "no_berth" };
   const cost = boatCost(state, tier);
   if (state.money < cost) return { ok: false, reason: "poor" };
@@ -555,6 +566,16 @@ export function upgradeDock(state: GameState, events: SimEvent[] = []): ActionRe
   state.money -= cost;
   state.dockLevel++;
   bumpMission(state, "dock", 1, events, state.dockLevel);
+  return { ok: true };
+}
+
+/** Compra la Torre del Vigía (por vuelta): anticipa eventos y cofres. */
+export function buyVigia(state: GameState): ActionResult {
+  if (state.vigia) return { ok: false, reason: "owned" };
+  const cost = vigiaCost(state);
+  if (state.money < cost) return { ok: false, reason: "poor" };
+  state.money -= cost;
+  state.vigia = true;
   return { ok: true };
 }
 
@@ -704,27 +725,53 @@ export function buyLegacy(state: GameState, branch: C.LegacyBranch, events: SimE
   return { ok: true };
 }
 
-/** Prestigio: vende el puerto → reputación permanente, reinicio de la vuelta. */
-export function doPrestige(state: GameState, now: number): ActionResult {
+/**
+ * Prestigio: vende el puerto → reputación permanente, reinicio de la vuelta.
+ * `buyerId` (v1.6): comprador elegido entre prestigeOffers() — cada uno con su trato.
+ */
+export function doPrestige(state: GameState, now: number, buyerId = "naviera", events: SimEvent[] = []): ActionResult {
   if (!canPrestige(state)) return { ok: false, reason: "not_yet" };
-  const gain = prestigeGain(state);
+  // El comprador debe estar sobre la mesa (o ser la Naviera de siempre).
+  if (buyerId !== "naviera" && !prestigeOffers(state).some((b) => b.id === buyerId)) {
+    return { ok: false, reason: "bad_buyer" };
+  }
+  const gain = buyerGain(state, buyerId);
   if (gain <= 0) return { ok: false, reason: "no_gain" };
+
+  // Efectos del trato que dependen del estado PREVIO al reset.
+  const startCash = buyerId === "viejaguardia" ? incomeRate(state) * C.BUYER_VIEJAGUARDIA_SECONDS : 0;
+  let keptBoat: Boat | null = null;
+  if (buyerId === "cofradia" && state.boats.length >= 2) {
+    keptBoat = state.boats.reduce((a, b) => (cargoValue(state, b) < cargoValue(state, a) ? b : a));
+  }
 
   state.reputation += gain;
   state.repEarned += gain;
   state.prestiges++;
   if (gain > state.stats.bestRepGain) state.stats.bestRepGain = gain;
-  state.money = 0;
+  if (buyerId !== "naviera") state.stats.specialSales++;
+  state.money = Math.max(0, startCash);
   state.lifetime = 0;
   state.boats = [];
   state.nextBoatId = 1;
   state.boats.push(newBoat(state, 0));
+  if (keptBoat) {
+    // La Cofradía: tu barco más humilde te espera en el muelle, sin patrón y descargado.
+    keptBoat.id = state.nextBoatId++;
+    keptBoat.skipper = null;
+    keptBoat.cargo = 0;
+    keptBoat.phase = "out";
+    keptBoat.phaseT = 0;
+    state.boats.push(keptBoat);
+  }
   state.dockLevel = 0;
   state.lonjaLvl = 0;
   state.managerLvl = 0;
   state.managerT = 0;
   state.zonesUnlocked = 0;
   state.combo = { n: 0, t: 0 };
+  state.vigia = false;
+  if (buyerId === "anticuario") grantRelic(state, events);
   state.missions = [];
   state.missionsDone = 0;
   state.event = null;

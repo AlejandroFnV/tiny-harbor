@@ -16,6 +16,7 @@ import {
   acceptOrder,
   buyBoat,
   buyLegacy,
+  buyVigia,
   claimGift,
   collectAll,
   collectBoat,
@@ -35,6 +36,7 @@ import {
   upgradeDock,
   upgradeLonja,
 } from "./sim/sim";
+import { completionPct } from "./sim/economy";
 import { formatMoney } from "./sim/format";
 import { newGame } from "./sim/state";
 import type { GameState, SimEvent } from "./sim/types";
@@ -257,15 +259,26 @@ const actions = {
     handleEvents(events);
     ui.renderTab();
   },
-  prestige() {
-    const r = doPrestige(state, Date.now());
+  prestige(buyerId: string) {
+    const events: SimEvent[] = [];
+    const r = doPrestige(state, Date.now(), buyerId, events);
     if (r.ok) {
+      const buyer = C.BUYERS.find((b) => b.id === buyerId);
       audio.play("prestige");
       renderer.particles.confetti(window.innerWidth / 2, window.innerHeight * 0.4, 60);
-      ui.toast(`Puerto vendido. Reputación +${r.gained}. Empieza la leyenda otra vez.`);
+      ui.toast(`Vendido a ${buyer?.name ?? "La Naviera"}. Reputación +${r.gained}. Empieza la leyenda otra vez.`);
       persist();
+      handleEvents(events);
       ui.renderTab();
     }
+  },
+  buyVigia() {
+    if (buyVigia(state).ok) {
+      audio.play("buy");
+      ui.toast("La Torre del Vigía se alza. Ahora ves venir las cosas.");
+      persist();
+    } else audio.play("error");
+    ui.renderTab();
   },
   resolveStorm(choice: "shelter" | "risk") {
     resolveStorm(state, choice);
@@ -361,6 +374,7 @@ async function buildShareCard(): Promise<void> {
     `${formatMoney(state.totalEarned)} ganados · ${state.prestiges} puertos vendidos`,
     `${state.discovered.length}/${C.SPECIES.length} especies · ${state.relics.length}/${C.RELICS.length} reliquias`,
     `${state.achievements.length}/${C.ACHIEVEMENTS.length} logros · ${state.stats.krakensRepelled} krakens ahuyentados`,
+    `puerto completado al ${completionPct(state)}%`,
   ];
   g.font = "700 24px 'Bricolage Grotesque Variable', sans-serif";
   lines.forEach((l, i) => g.fillText(l, W / 2, H * 0.62 + i * 44));

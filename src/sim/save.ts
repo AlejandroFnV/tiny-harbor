@@ -18,6 +18,7 @@ import type { GameState } from "./types";
  *          escala nueva (rep^(2/3), mismo lifetime equivalente); lonja, racha y stats nuevas.
  * v5 → v6: mercado de la lonja, cofres a la deriva, expediciones y reliquias.
  * v6 → v7: kraken, leyendas, regalo diario, nombre del puerto y récords.
+ * v7 → v8: compradores del puerto, Torre del Vigía y El Alba.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -106,6 +107,13 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof stats.bestGiftStreak !== "number") stats.bestGiftStreak = 0;
     raw.stats = stats;
     raw.version = 7;
+  },
+  7: (raw) => {
+    if (typeof raw.vigia !== "boolean") raw.vigia = false;
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.specialSales !== "number") stats.specialSales = 0;
+    raw.stats = stats;
+    raw.version = 8;
   },
 };
 

@@ -50,9 +50,10 @@ function botAct(s: GameState): boolean {
     if (hireManager(s).ok) return true;
   }
 
-  // 3. Mejor barco pagable (de mayor a menor tier).
+  // 3. Mejor barco pagable (de mayor a menor tier; El Alba exige leyendas → fuera).
   if (s.boats.length < berths(s)) {
     for (let t = C.BOAT_TIERS.length - 1; t >= 0; t--) {
+      if (t === C.ALBA_TIER) continue;
       if (s.money >= boatCost(s, t)) return buyBoat(s, t).ok;
     }
   } else if (s.dockLevel < C.DOCK_MAX_LEVEL && s.money >= dockCost(s)) {

@@ -51,12 +51,13 @@ export function newGame(now: number, seed = 1234567): GameState {
     expedition: null,
     relics: [],
     portName: "",
+    vigia: false,
     gift: { lastAt: 0, streak: 0 },
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
     settings: { muted: false, music: true },
-    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
+    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
     rngSeed: seed >>> 0,
   };
   // Empiezas con un bote heredado, ya faenando.
@@ -175,8 +176,9 @@ export function sanitize(state: GameState): GameState {
   const knownRelics = new Set(C.RELICS.map((r) => r.id));
   state.relics = [...new Set(state.relics)].filter((id) => knownRelics.has(id));
 
-  // Nombre del puerto y paquete del pescador.
+  // Nombre del puerto, vigía y paquete del pescador.
   state.portName = typeof state.portName === "string" ? state.portName.slice(0, C.PORT_NAME_MAX) : "";
+  state.vigia = state.vigia === true;
   if (!state.gift || typeof state.gift !== "object") state.gift = { lastAt: 0, streak: 0 };
   state.gift.lastAt = num(state.gift.lastAt, 0);
   state.gift.streak = Math.floor(num(state.gift.streak, 0, 0, 100000));
@@ -206,7 +208,7 @@ export function sanitize(state: GameState): GameState {
     state.order = null;
   }
   if (!state.stats || typeof state.stats !== "object") {
-    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 };
+    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 };
   }
   state.stats.collects = Math.floor(num(state.stats.collects, 0));
   state.stats.boatsBought = Math.floor(num(state.stats.boatsBought, 0));
@@ -221,6 +223,7 @@ export function sanitize(state: GameState): GameState {
   state.stats.expeditionsDone = Math.floor(num(state.stats.expeditionsDone, 0));
   state.stats.soldHigh = Math.floor(num(state.stats.soldHigh, 0));
   state.stats.krakensRepelled = Math.floor(num(state.stats.krakensRepelled, 0));
+  state.stats.specialSales = Math.floor(num(state.stats.specialSales, 0));
   state.stats.bestLifetime = num(state.stats.bestLifetime, state.lifetime);
   state.stats.bestRepGain = Math.floor(num(state.stats.bestRepGain, 0));
   state.stats.bestGiftStreak = Math.floor(num(state.stats.bestGiftStreak, state.gift.streak));

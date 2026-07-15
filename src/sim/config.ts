@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -41,7 +41,14 @@ export const BOAT_TIERS: BoatTierDef[] = [
   { id: "palangrero", name: "Palangrero", baseCost: 8_000_000, cycle: 72, baseCargo: 2_200_000, hull: "#3f8f7a", size: 3.1 },
   { id: "atunero", name: "Atunero", baseCost: 110_000_000, cycle: 85, baseCargo: 36_000_000, hull: "#5464a8", size: 3.4 },
   { id: "factoria", name: "Buque factoría", baseCost: 1_500_000_000, cycle: 100, baseCargo: 550_000_000, hull: "#8a4a68", size: 3.8 },
+  // El Alba: barco de leyenda ÚNICO (exige las 4 leyendas). No sale en el astillero normal.
+  { id: "alba", name: "El Alba", baseCost: 200_000_000, cycle: 45, baseCargo: 18_000_000, hull: "#e8e2d0", size: 3.2 },
 ];
+
+/** Índice de El Alba en BOAT_TIERS. Único: 1 por flota; inmune a tormenta y kraken; imán de especies. */
+export const ALBA_TIER = 8;
+/** Multiplicador de prob. de especies cuando cobra El Alba. */
+export const ALBA_SPECIES_MULT = 5;
 
 /** Nº máximo de barcos totales (rendimiento móvil + legibilidad de escena). */
 export const MAX_BOATS = 14;
@@ -475,6 +482,34 @@ export const LEGACY_FARO_OFFLINE_S = 2 * 3600;
 export const LEGACY_FARO_SPECIES = 0.35;
 
 // ---------------------------------------------------------------------------
+// Compradores del puerto (elección al vender — prestigio con decisión)
+// ---------------------------------------------------------------------------
+export interface BuyerDef {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+/** La Naviera (estándar) siempre está; se le suman 2 ofertas especiales. */
+export const BUYERS: BuyerDef[] = [
+  { id: "naviera", name: "La Naviera", desc: "El precio justo, sin letra pequeña" },
+  { id: "gremio", name: "El Gremio de Armadores", desc: "Pagan un 20% más de reputación" },
+  { id: "cofradia", name: "La Cofradía", desc: "Te dejan quedarte tu barco más humilde" },
+  { id: "viejaguardia", name: "La Vieja Guardia", desc: "Arrancas la próxima vuelta con 10 min de ingresos en caja" },
+  { id: "anticuario", name: "El Anticuario", desc: "Un 20% menos de reputación… y una reliquia que le sobra" },
+];
+export const BUYER_GREMIO_BONUS = 0.2;
+export const BUYER_ANTICUARIO_MALUS = 0.2;
+export const BUYER_VIEJAGUARDIA_SECONDS = 600;
+
+// ---------------------------------------------------------------------------
+// La Torre del Vigía (compra por vuelta: anticipa eventos y cofres)
+// ---------------------------------------------------------------------------
+/** Coste = max(min, income × segundos). Se pierde al vender el puerto. */
+export const VIGIA_COST_SECONDS = 120;
+export const VIGIA_COST_MIN = 2_000;
+
+// ---------------------------------------------------------------------------
 // El paquete del pescador (regalo diario con racha de días)
 // ---------------------------------------------------------------------------
 /** Horas mínimas entre regalos y horas máximas para conservar la racha. */
@@ -533,6 +568,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "leyenda1", name: "Cuento de taberna", desc: "Pesca tu primera leyenda" },
   { id: "leyendas4", name: "Las cuatro leyendas", desc: "Pesca las 4 leyendas del mar" },
   { id: "fiel7", name: "Sal en las venas", desc: "Vuelve al puerto 7 días seguidos" },
+  { id: "alba1", name: "El amanecer", desc: "Bota El Alba, el barco de leyenda" },
+  { id: "tratos3", name: "Mano izquierda", desc: "Vende 3 puertos a compradores especiales" },
 ];
 
 // ---------------------------------------------------------------------------

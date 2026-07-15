@@ -22,10 +22,11 @@ const TEMPLATES: Template[] = [
   {
     kind: "buy_boat",
     make: (s) => {
-      // Tier objetivo: el más alto que ya puedas ver como alcanzable.
+      // Tier objetivo: el más alto que ya puedas ver como alcanzable (El Alba no cuenta).
       const reach = Math.max(s.money, s.lifetime * 0.5) * 4 + 100;
       let tier = 0;
       for (let i = C.BOAT_TIERS.length - 1; i >= 0; i--) {
+        if (i === C.ALBA_TIER) continue;
         if (C.BOAT_TIERS[i].baseCost <= reach) {
           tier = i;
           break;

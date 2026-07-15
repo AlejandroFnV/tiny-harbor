@@ -46,6 +46,16 @@ export function marketMult(state: GameState): number {
 
 const LEGEND_IDS = new Set(C.SPECIES.filter((s) => s.rarity === "leyenda").map((s) => s.id));
 
+/** El Alba se desbloquea al reunir las 4 leyendas. */
+export function albaUnlocked(state: GameState): boolean {
+  for (const id of LEGEND_IDS) if (!state.discovered.includes(id)) return false;
+  return true;
+}
+
+export function ownsAlba(state: GameState): boolean {
+  return state.boats.some((b) => b.tier === C.ALBA_TIER);
+}
+
 /** Bonus permanente de la pescadoteca (+1% por especie, +5% por leyenda). */
 export function speciesMult(state: GameState): number {
   let m = 1;
@@ -150,6 +160,7 @@ export function speciesChanceMult(state: GameState, boat: Boat): number {
   let m = 1 + C.LEGACY_FARO_SPECIES * state.legacy.faro;
   if (boat.skipper?.trait === "ojo") m *= C.TRAIT_SPECIES_MULT;
   if (hasRelic(state, "catalejo")) m *= 1 + C.RELIC_SPECIES;
+  if (boat.tier === C.ALBA_TIER) m *= C.ALBA_SPECIES_MULT; // El Alba atrae a los peces
   return m;
 }
 
@@ -208,7 +219,58 @@ export function zoneCost(state: GameState): number | null {
   return next === null ? null : C.ZONES[next].unlockCost;
 }
 
+// --- Torre del vigía / completado -------------------------------------------------
+
+export function vigiaCost(state: GameState): number {
+  return Math.ceil(Math.max(C.VIGIA_COST_MIN, incomeRate(state) * C.VIGIA_COST_SECONDS));
+}
+
+/** % de puerto completado (todo lo permanente): logros, especies, reliquias y legado. */
+export function completionPct(state: GameState): number {
+  const legacyLvls = state.legacy.astillero + state.legacy.escuela + state.legacy.faro;
+  const pct =
+    (state.achievements.length / C.ACHIEVEMENTS.length) * 40 +
+    (state.discovered.length / C.SPECIES.length) * 30 +
+    (state.relics.length / C.RELICS.length) * 20 +
+    (legacyLvls / (C.LEGACY_MAX_LVL * 3)) * 10;
+  return Math.min(100, Math.floor(pct));
+}
+
 // --- Prestigio ------------------------------------------------------------------
+
+/**
+ * Ofertas de compra del puerto: La Naviera (estándar) + 2 especiales.
+ * Deterministas para este (semilla, nº de venta) y SIN gastar el RNG de la partida.
+ */
+export function prestigeOffers(state: GameState): C.BuyerDef[] {
+  let seed = (state.rngSeed ^ Math.imul(state.prestiges + 1, 2654435761)) >>> 0;
+  const rand = () => {
+    seed = (seed + 0x6d2b79f5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const pool = C.BUYERS.filter(
+    (b) =>
+      b.id !== "naviera" &&
+      (b.id !== "anticuario" || state.relics.length < C.RELICS.length) &&
+      (b.id !== "cofradia" || state.boats.length >= 2),
+  );
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return [C.BUYERS[0], ...pool.slice(0, 2)];
+}
+
+/** Reputación que pagaría un comprador concreto. */
+export function buyerGain(state: GameState, buyerId: string): number {
+  const base = prestigeGain(state);
+  if (buyerId === "gremio") return Math.floor(base * (1 + C.BUYER_GREMIO_BONUS));
+  if (buyerId === "anticuario") return Math.max(1, Math.floor(base * (1 - C.BUYER_ANTICUARIO_MALUS)));
+  return base;
+}
 
 /** Umbral de venta de ESTA vuelta: cada puerto vendido pide el triple que el anterior. */
 export function prestigeThreshold(state: GameState): number {

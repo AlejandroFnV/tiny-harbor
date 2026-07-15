@@ -212,7 +212,7 @@ describe("migración v3 → v4", () => {
   });
 
   it("contenido nuevo: 8 tiers, 8 zonas y 30 especies coherentes", () => {
-    expect(C.BOAT_TIERS.length).toBe(8);
+    expect(C.BOAT_TIERS.length).toBe(9); // 8 + El Alba (v1.6)
     expect(C.ZONES.length).toBe(8);
     expect(C.SPECIES.length).toBe(34); // 30 + 4 leyendas (v1.5)
     // Toda especie apunta a una zona existente; toda zona tiene especies.
@@ -220,8 +220,10 @@ describe("migración v3 → v4", () => {
     for (let z = 0; z < C.ZONES.length; z++) {
       expect(C.SPECIES.some((sp) => sp.zone === z)).toBe(true);
     }
-    // La curva de coste/valor de tiers y zonas es estrictamente creciente.
+    // La curva de coste/valor de tiers es estrictamente creciente
+    // (El Alba queda fuera: es un tier especial fuera de la progresión).
     for (let i = 1; i < C.BOAT_TIERS.length; i++) {
+      if (i === C.ALBA_TIER) continue;
       expect(C.BOAT_TIERS[i].baseCost).toBeGreaterThan(C.BOAT_TIERS[i - 1].baseCost);
       expect(C.BOAT_TIERS[i].baseCargo).toBeGreaterThan(C.BOAT_TIERS[i - 1].baseCargo);
     }

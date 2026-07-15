@@ -231,6 +231,26 @@ export const BOATS: Sprite[] = [
     "...IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII....",
     "....IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII......",
   ]),
+  // 8 · El Alba — goleta de leyenda: casco claro, dos velas doradas y gallardete
+  sprite("alba", L_BOAT, [
+    "...............M....................",
+    "..............MM....................",
+    "..............I.........M...........",
+    ".......MMM....I.........I...........",
+    ".....MMMMMM...I......MMMI...........",
+    "....MMMMMMMM..I....MMMMMI...........",
+    "...MMMMMMMMMM.I...MMMMMMI...........",
+    "..MMMMMMMMMMM.I..MMMMMMMI...........",
+    "...MMMMMMMMM..I...MMMMMMI...........",
+    ".....MMMMM....I.....MMMMI...........",
+    "..............I.......MMI...........",
+    "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII..",
+    "IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII",
+    ".IHFFFFHHHHHHHHHHHHHHHHHHHHHHHHHHI.",
+    "..IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI..",
+    "...IHHHHHHHHHHHHHHHHHHHHHHHHHHII...",
+    "....IIIIIIIIIIIIIIIIIIIIIIIIII.....",
+  ]),
 ];
 
 // --- carga lista para cobrar -------------------------------------------------
