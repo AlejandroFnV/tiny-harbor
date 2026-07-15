@@ -15,11 +15,13 @@ import { loadFromStorage, saveToStorage, clearStorage } from "./sim/save";
 import {
   acceptOrder,
   buyBoat,
+  buyLegacy,
   collectAll,
   collectBoat,
   declineOrder,
   doPrestige,
   hireManager,
+  hireSkipper,
   resolveStorm,
   tapShoal,
   tick,
@@ -79,6 +81,19 @@ function handleEvents(events: SimEvent[]): void {
         audio.play("chest");
         renderer.particles.confetti(window.innerWidth * 0.68, window.innerHeight * 0.72, 20);
         break;
+      case "skipper_hired":
+        ui.toast(`${ev.name} toma el timón del barco nº${ev.boatId}.`);
+        audio.play("upgrade");
+        break;
+      case "achievement": {
+        const a = C.ACHIEVEMENTS.find((x) => x.id === ev.id);
+        if (a) {
+          ui.toast(`Logro: ${a.name} · +${C.ACHIEVEMENT_INCOME_BONUS * 100}% ingresos para siempre`);
+          audio.play("mission");
+          renderer.particles.confetti(window.innerWidth / 2, window.innerHeight * 0.25, 18);
+        }
+        break;
+      }
       case "species_found": {
         const sp = C.SPECIES.find((x) => x.id === ev.id);
         if (sp) {
@@ -135,6 +150,25 @@ const actions = {
     if (hireManager(state, events).ok) {
       audio.play("upgrade");
       ui.toast("El gestor cobra las cargas por ti.");
+      persist();
+    } else audio.play("error");
+    handleEvents(events);
+    ui.renderTab();
+  },
+  hireSkipper(index: number) {
+    const events: SimEvent[] = [];
+    if (hireSkipper(state, index, events).ok) {
+      audio.play("buy");
+      persist();
+    } else audio.play("error");
+    handleEvents(events);
+    ui.renderTab();
+  },
+  buyLegacy(branch: C.LegacyBranch) {
+    const events: SimEvent[] = [];
+    if (buyLegacy(state, branch, events).ok) {
+      audio.play("prestige");
+      ui.toast("El legado del puerto crece. Esto ya no se pierde.");
       persist();
     } else audio.play("error");
     handleEvents(events);

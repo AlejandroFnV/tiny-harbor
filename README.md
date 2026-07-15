@@ -1,6 +1,6 @@
 # Tiny Harbor
 
-Simulador idle/tycoon de puerto pesquero en pixel art. Heredas un puerto decadente y lo conviertes en un puerto próspero: los barcos zarpan y vuelven solos, tú cobras la carga, compras flota, desbloqueas caladeros y acabas vendiendo el puerto por reputación permanente. El pueblo del horizonte se construye con tus hitos, la lonja te hace pedidos contrarreloj y cada especie de la pescadoteca (18) da +1% de ingresos para siempre. PWA instalable: funciona offline.
+Simulador idle/tycoon de puerto pesquero en pixel art. Heredas un puerto decadente y lo conviertes en un puerto próspero: los barcos zarpan y vuelven solos, tú cobras la carga, compras flota (8 tiers, del bote al buque factoría), desbloqueas 8 caladeros hasta El Fin del Mapa y acabas vendiendo el puerto por reputación permanente. La reputación se gasta en un **árbol de legado** que sobrevive al prestigio, en la taberna fichas **patrones** con nombre, retrato y rasgo propio, y hay **17 logros** permanentes. El pueblo del horizonte se construye con tus hitos, la lonja te hace pedidos contrarreloj y cada especie de la pescadoteca (30) da +1% de ingresos para siempre. PWA instalable: funciona offline.
 
 ## Correr
 

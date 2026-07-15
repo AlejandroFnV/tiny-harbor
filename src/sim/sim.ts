@@ -14,9 +14,12 @@ import {
   dockCost,
   eventMult,
   incomeRate,
+  legacyCost,
   managerCost,
   nextZone,
   prestigeGain,
+  skipperCost,
+  speciesChanceMult,
   speedUpgradeCost,
   zoneCost,
 } from "./economy";
@@ -36,18 +39,19 @@ export function phaseDuration(state: GameState, boat: Boat, phase: "out" | "fish
   return cycleTime(state, boat) * PHASE_SPLIT[phase];
 }
 
-function gainMoney(state: GameState, amount: number, events: SimEvent[]): void {
+function gainMoney(state: GameState, amount: number, events: SimEvent[], orderMult = 1): void {
   state.money += amount;
   state.lifetime += amount;
   state.totalEarned += amount;
   // Pedido de la lonja activo: toda pesca cuenta para el objetivo.
   const order = state.order;
   if (order && order.stage === "active") {
-    order.progress += amount;
+    order.progress += amount * orderMult;
     if (order.progress >= order.goal) {
       state.money += order.reward;
       state.lifetime += order.reward;
       state.totalEarned += order.reward;
+      state.stats.ordersDone++;
       events.push({ kind: "order_done", reward: order.reward });
       state.order = null;
       state.orderT = C.ORDER_INTERVAL_MIN_S + nextRand(state) * (C.ORDER_INTERVAL_MAX_S - C.ORDER_INTERVAL_MIN_S);
@@ -57,11 +61,12 @@ function gainMoney(state: GameState, amount: number, events: SimEvent[]): void {
 }
 
 /** Tirada de descubrimiento de especie (zona actual, no descubiertas). */
-function rollSpecies(state: GameState, events: SimEvent[]): void {
+function rollSpecies(state: GameState, boat: Boat, events: SimEvent[]): void {
+  const mult = speciesChanceMult(state, boat);
   for (const sp of C.SPECIES) {
     if (sp.zone !== state.zonesUnlocked) continue;
     if (state.discovered.includes(sp.id)) continue;
-    if (nextRand(state) < C.SPECIES_CHANCE[sp.rarity]) {
+    if (nextRand(state) < C.SPECIES_CHANCE[sp.rarity] * mult) {
       state.discovered.push(sp.id);
       events.push({ kind: "species_found", id: sp.id });
       return; // máx. una por cobro
@@ -71,7 +76,8 @@ function rollSpecies(state: GameState, events: SimEvent[]): void {
 
 function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events: SimEvent[]): number {
   const amount = boat.cargo * eventMult(state);
-  gainMoney(state, amount, events);
+  const orderMult = boat.skipper?.trait === "pregonero" ? C.TRAIT_ORDER_MULT : 1;
+  gainMoney(state, amount, events, orderMult);
   boat.cargo = 0;
   boat.phase = "out";
   boat.phaseT = 0;
@@ -79,7 +85,7 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
   events.push({ kind: "collect", boatId: boat.id, amount, auto });
   events.push({ kind: "depart", boatId: boat.id });
   bumpMission(state, "collect", 1, events);
-  rollSpecies(state, events);
+  rollSpecies(state, boat, events);
   return amount;
 }
 
@@ -107,8 +113,9 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
       else {
         // Llega a puerto con la carga.
         boat.cargo = cargoValue(state, boat);
-        // Tormenta arriesgada: puede perder media carga.
-        if (stormActive && state.event!.choice === "risk" && nextRand(state) < C.STORM_LOSS_CHANCE) {
+        // Tormenta arriesgada: puede perder media carga (los lobos de mar, nunca).
+        if (stormActive && state.event!.choice === "risk" && boat.skipper?.trait !== "lobo"
+            && nextRand(state) < C.STORM_LOSS_CHANCE) {
           const lost = boat.cargo / 2;
           boat.cargo -= lost;
           events.push({ kind: "cargo_lost", boatId: boat.id, amount: lost });
@@ -140,7 +147,63 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
   // Pedidos de la lonja ---------------------------------------------------------
   tickOrder(state, dt, events);
 
+  // Taberna: van llegando candidatos a patrón -----------------------------------
+  tickTavern(state, dt);
+
+  // Logros ------------------------------------------------------------------------
+  tickAchievements(state, events);
+
   return events;
+}
+
+function tickTavern(state: GameState, dt: number): void {
+  if (state.boats.length < C.TAVERN_MIN_BOATS) return;
+  if (state.tavern.candidates.length >= C.TAVERN_SLOTS) return;
+  state.tavern.refreshT -= dt;
+  if (state.tavern.refreshT > 0) return;
+  state.tavern.refreshT = C.TAVERN_REFRESH_S;
+  // Nombre nuevo que no esté ya sentado en la taberna ni al mando de un barco.
+  const taken = new Set<string>([
+    ...state.tavern.candidates.map((c) => c.name),
+    ...state.boats.map((b) => b.skipper?.name ?? ""),
+  ]);
+  const free = C.SKIPPER_NAMES.filter((n) => !taken.has(n));
+  const pool = free.length > 0 ? free : C.SKIPPER_NAMES;
+  const name = pool[Math.floor(nextRand(state) * pool.length)];
+  const trait = C.TRAITS[Math.floor(nextRand(state) * C.TRAITS.length)].id;
+  state.tavern.candidates.push({ name, trait, cost: skipperCost(state) });
+}
+
+/** Condiciones de logro: puras sobre el estado. */
+const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
+  flota5: (s) => s.boats.length >= 5,
+  flotafull: (s) => s.boats.length >= C.MAX_BOATS,
+  pesquero1: (s) => s.boats.some((b) => b.tier >= 3),
+  factoria1: (s) => s.boats.some((b) => b.tier >= 7),
+  altamar: (s) => s.zonesUnlocked >= 3,
+  confin: (s) => s.zonesUnlocked >= C.ZONES.length - 1,
+  millon: (s) => s.totalEarned >= 1e6,
+  billon: (s) => s.totalEarned >= 1e9,
+  prestigio1: (s) => s.prestiges >= 1,
+  prestigio5: (s) => s.prestiges >= 5,
+  peces10: (s) => s.discovered.length >= 10,
+  pecesall: (s) => s.discovered.length >= C.SPECIES.length,
+  taps100: (s) => s.stats.taps >= 100,
+  pedidos10: (s) => s.stats.ordersDone >= 10,
+  tormentas5: (s) => s.stats.stormsRisked >= 5,
+  patrones3: (s) => s.stats.skippersHired >= 3,
+  legado1: (s) => s.legacy.astillero + s.legacy.escuela + s.legacy.faro >= 1,
+};
+
+function tickAchievements(state: GameState, events: SimEvent[]): void {
+  for (const def of C.ACHIEVEMENTS) {
+    if (state.achievements.includes(def.id)) continue;
+    const cond = ACHIEVEMENT_CONDS[def.id];
+    if (cond && cond(state)) {
+      state.achievements.push(def.id);
+      events.push({ kind: "achievement", id: def.id });
+    }
+  }
 }
 
 function tickOrder(state: GameState, dt: number, events: SimEvent[]): void {
@@ -335,6 +398,37 @@ export function resolveStorm(state: GameState, choice: "shelter" | "risk"): Acti
   ev.choice = choice;
   ev.stage = "active";
   ev.remaining = C.STORM_DURATION_S;
+  if (choice === "risk") state.stats.stormsRisked++;
+  return { ok: true };
+}
+
+/** Ficha al candidato `index` de la taberna: va al mejor barco sin patrón. */
+export function hireSkipper(state: GameState, index: number, events: SimEvent[] = []): ActionResult {
+  const cand = state.tavern.candidates[index];
+  if (!cand) return { ok: false, reason: "no_candidate" };
+  const free = state.boats.filter((b) => !b.skipper);
+  if (free.length === 0) return { ok: false, reason: "no_boat" };
+  if (state.money < cand.cost) return { ok: false, reason: "poor" };
+  state.money -= cand.cost;
+  // Al mando del barco más valioso sin patrón (donde el rasgo rinde más).
+  const boat = free.reduce((a, b) => (cargoValue(state, b) > cargoValue(state, a) ? b : a));
+  boat.skipper = { name: cand.name, trait: cand.trait };
+  state.tavern.candidates.splice(index, 1);
+  state.tavern.refreshT = C.TAVERN_REFRESH_S;
+  state.stats.skippersHired++;
+  bumpMission(state, "hire_skipper", 1, events);
+  events.push({ kind: "skipper_hired", name: cand.name, boatId: boat.id });
+  return { ok: true };
+}
+
+/** Compra el siguiente nivel de una rama del legado (cuesta reputación). */
+export function buyLegacy(state: GameState, branch: C.LegacyBranch, events: SimEvent[] = []): ActionResult {
+  const cost = legacyCost(state, branch);
+  if (cost === null) return { ok: false, reason: "max" };
+  if (state.reputation < cost) return { ok: false, reason: "poor" };
+  state.reputation -= cost;
+  state.legacy[branch]++;
+  tickAchievements(state, events);
   return { ok: true };
 }
 
@@ -345,6 +439,7 @@ export function doPrestige(state: GameState, now: number): ActionResult {
   if (gain <= 0) return { ok: false, reason: "no_gain" };
 
   state.reputation += gain;
+  state.repEarned += gain;
   state.prestiges++;
   state.money = 0;
   state.lifetime = 0;
@@ -361,7 +456,8 @@ export function doPrestige(state: GameState, now: number): ActionResult {
   state.eventT = C.EVENT_WARMUP_S;
   state.order = null;
   state.orderT = C.ORDER_WARMUP_S;
-  // state.discovered NO se resetea: la pescadoteca es permanente.
+  state.tavern = { candidates: [], refreshT: C.TAVERN_REFRESH_S };
+  // NO se resetean: discovered (pescadoteca), legacy, achievements, repEarned.
   state.playTime = 0;
   state.lastSeen = now;
   rollMissions(state);

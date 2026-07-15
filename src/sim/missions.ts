@@ -69,6 +69,14 @@ const TEMPLATES: Template[] = [
     },
   },
   {
+    kind: "hire_skipper",
+    make: (s) => {
+      if (s.boats.length < C.TAVERN_MIN_BOATS) return null;
+      if (!s.boats.some((b) => !b.skipper)) return null;
+      return { param: 0, target: 1, text: "Ficha un patrón en la taberna" };
+    },
+  },
+  {
     kind: "dock",
     make: (s) => {
       if (s.dockLevel >= C.DOCK_MAX_LEVEL) return null;

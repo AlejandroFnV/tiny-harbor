@@ -12,23 +12,27 @@ import {
   capUpgradeCost,
   dockCost,
   incomeRate,
+  legacyCost,
   managerCost,
   nextZone,
   offlineCapSeconds,
   prestigeGain,
+  prestigeMult,
   speedUpgradeCost,
   zoneCost,
 } from "../sim/economy";
 import { formatDuration, formatMoney } from "../sim/format";
 import type { OfflineResult } from "../sim/offline";
 import type { GameState } from "../sim/types";
-import { boatThumbURL, speciesThumbURL } from "../render/sprites";
+import { boatThumbURL, skipperPortraitURL, speciesThumbURL } from "../render/sprites";
 
 export interface UIActions {
   buyBoat(tier: number): void;
   upgradeBoat(boatId: number, what: "speed" | "cap"): void;
   upgradeDock(): void;
   hireManager(): void;
+  hireSkipper(index: number): void;
+  buyLegacy(branch: C.LegacyBranch): void;
   unlockZone(): void;
   prestige(): void;
   resolveStorm(choice: "shelter" | "risk"): void;
@@ -40,6 +44,8 @@ export interface UIActions {
   resetGame(): void;
   uiSound(): void;
 }
+
+const traitDef = (id: string) => C.TRAITS.find((t) => t.id === id);
 
 type TabName = "flota" | "puerto" | "mapa" | "prestigio";
 
@@ -153,6 +159,8 @@ export class UI {
       case "up-cap": this.act.upgradeBoat(id, "cap"); break;
       case "up-dock": this.act.upgradeDock(); break;
       case "hire-manager": this.act.hireManager(); break;
+      case "hire-skipper": this.act.hireSkipper(Number(el.dataset.index)); break;
+      case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
       case "unlock-zone": this.act.unlockZone(); break;
       case "prestige": this.confirmPrestige(); break;
       case "reset": this.confirmReset(); break;
@@ -236,11 +244,16 @@ export class UI {
     html += `<div class="section-title">TU FLOTA (${s.boats.length}/${berths(s)} amarres)</div>`;
     for (const b of s.boats) {
       const t = C.BOAT_TIERS[b.tier];
+      const tr = b.skipper ? traitDef(b.skipper.trait) : null;
+      const chip = b.skipper
+        ? `<span class="skipper-chip" title="${tr?.desc ?? ""}"><img src="${skipperPortraitURL(b.skipper.name)}" alt="">${b.skipper.name} · ${tr?.name ?? ""}</span>`
+        : "";
       html += `<div class="boat-row" data-boat="${b.id}">
         <div class="head">
           <span class="name">${t.name} <small>nº${b.id}</small></span>
           <span class="status" data-status></span>
         </div>
+        ${chip}
         <div class="ups">
           <button class="btn" data-action="up-speed" data-id="${b.id}">Velocidad ${b.speedLvl >= C.SPEED_MAX_LVL ? "MÁX" : `${b.speedLvl + 1}`}<span class="sub" data-cost-label></span></button>
           <button class="btn" data-action="up-cap" data-id="${b.id}">Redes ${b.capLvl >= C.CAP_MAX_LVL ? "MÁX" : `${b.capLvl + 1}`}<span class="sub" data-cost-label></span></button>
@@ -273,6 +286,32 @@ export class UI {
       <div class="desc">${mDesc}</div></div>
       ${mLvl >= C.MANAGER_MAX_LVL ? "" : `<button class="btn primary" data-action="hire-manager">${mLvl === 0 ? "Contratar" : "Subir"}<span class="sub" data-cost-label></span></button>`}
     </div>`;
+
+    // Taberna: candidatos a patrón (abre con 2+ barcos).
+    if (s.boats.length >= C.TAVERN_MIN_BOATS) {
+      html += `<div class="section-title">LA TABERNA</div>`;
+      const freeBoats = s.boats.filter((b) => !b.skipper).length;
+      if (s.tavern.candidates.length === 0) {
+        html += `<div class="card"><div class="info"><div class="name">Nadie en la barra</div>
+          <div class="desc">Los patrones van llegando con el tiempo. Vuelve en un rato.</div></div></div>`;
+      }
+      s.tavern.candidates.forEach((cand, i) => {
+        const tr = traitDef(cand.trait);
+        html += `<div class="card tavern-card">
+          <img class="portrait" src="${skipperPortraitURL(cand.name)}" alt="">
+          <div class="info">
+            <div class="name">${cand.name} <small>${tr?.name ?? ""}</small></div>
+            <div class="desc">${tr?.desc ?? ""}</div>
+          </div>
+          <button class="btn primary" data-action="hire-skipper" data-index="${i}">
+            Fichar<span class="sub" data-cost-label></span>
+          </button>
+        </div>`;
+      });
+      if (freeBoats === 0 && s.tavern.candidates.length > 0) {
+        html += `<p class="tavern-note">Toda la flota tiene patrón. Bota otro barco para fichar más.</p>`;
+      }
+    }
 
     html += `<div class="card">
       <div class="info"><div class="name">Música del puerto</div>
@@ -335,18 +374,53 @@ export class UI {
     const can = canPrestige(s);
     let html = `<div class="prestige-box">
       <h3>Vender el puerto</h3>
-      <p>Empiezas de cero con reputación permanente: <b>+${C.PRESTIGE_MULT_PER_REP * 100}% de ingresos</b> por punto, para siempre.</p>
+      <p>Empiezas de cero con reputación permanente: <b>+${C.PRESTIGE_MULT_PER_REP * 100}% de ingresos</b> por punto, para siempre. La reputación también se gasta en el árbol de legado (gastarla no baja el multiplicador).</p>
       <div class="bar"><i style="width:${pct}%"></i></div>
       <p data-live="prestige-progress">${formatMoney(s.lifetime)} / ${formatMoney(C.PRESTIGE_MIN_LIFETIME)} ganados esta vuelta</p>
       <button class="btn gold" data-action="prestige" ${can ? "" : "disabled"} style="margin-top:10px">
         ${can ? `Vender el puerto (+${gain} reputación)` : "Aún no: sigue pescando"}
       </button>
     </div>`;
+
+    // Árbol de legado: se gasta reputación, sobrevive al prestigio.
+    html += `<div class="section-title">ÁRBOL DE LEGADO <span class="rep-balance">${s.reputation} rep disponible</span></div>`;
+    if (s.repEarned === 0) {
+      html += `<div class="card"><div class="info"><div class="name">Aún sin leyenda</div>
+        <div class="desc">Vende tu primer puerto para ganar reputación y abrir el legado.</div></div></div>`;
+    } else {
+      for (const br of C.LEGACY_BRANCHES) {
+        const lvl = s.legacy[br.id];
+        const cost = legacyCost(s, br.id);
+        const pips = Array.from({ length: C.LEGACY_MAX_LVL }, (_, i) => `<i class="${i < lvl ? "on" : ""}"></i>`).join("");
+        html += `<div class="card legacy-card">
+          <div class="info">
+            <div class="name">${br.name} <span class="pips">${pips}</span></div>
+            <div class="desc">${br.desc} por nivel</div>
+          </div>
+          ${cost === null
+            ? `<span class="legacy-max">MÁX</span>`
+            : `<button class="btn primary" data-action="buy-legacy" data-branch="${br.id}">Nivel ${lvl + 1}<span class="sub">${cost} rep</span></button>`}
+        </div>`;
+      }
+    }
+
+    // Logros: permanentes, +2% de ingresos cada uno.
+    const done = s.achievements.length;
+    html += `<div class="section-title">LOGROS (${done}/${C.ACHIEVEMENTS.length} · +${done * C.ACHIEVEMENT_INCOME_BONUS * 100}% ingresos)</div>
+    <div class="ach-grid">`;
+    for (const a of C.ACHIEVEMENTS) {
+      const got = s.achievements.includes(a.id);
+      html += `<div class="ach ${got ? "got" : ""}" title="${a.desc}">
+        <b>${got ? "★" : "☆"}</b><span>${a.name}</span>
+      </div>`;
+    }
+    html += `</div>`;
+
     html += `<div class="section-title">TU HISTORIA</div>
     <div class="stat-grid">
       <div class="stat"><b>${formatMoney(s.totalEarned)}</b><span>ganado en total</span></div>
       <div class="stat"><b>${s.prestiges}</b><span>puertos vendidos</span></div>
-      <div class="stat"><b>×${(1 + s.reputation * C.PRESTIGE_MULT_PER_REP).toFixed(2)}</b><span>multiplicador actual</span></div>
+      <div class="stat"><b>×${prestigeMult(s).toFixed(2)}</b><span>multiplicador de reputación</span></div>
       <div class="stat"><b>${formatDuration(s.playTime)}</b><span>al timón esta vuelta</span></div>
     </div>
     <button class="btn" data-action="reset" style="margin-top:6px;font-size:12.5px;opacity:.75">Borrar partida</button>`;
@@ -398,6 +472,17 @@ export class UI {
       mgrBtn.querySelector("[data-cost-label]")!.textContent = formatMoney(cost);
       mgrBtn.disabled = s.money < cost;
     }
+    document.querySelectorAll<HTMLButtonElement>("[data-action='hire-skipper']").forEach((btn) => {
+      const cand = s.tavern.candidates[Number(btn.dataset.index)];
+      if (!cand) return;
+      const freeBoats = s.boats.some((b) => !b.skipper);
+      btn.querySelector("[data-cost-label]")!.textContent = freeBoats ? formatMoney(cand.cost) : "sin barco libre";
+      btn.disabled = !freeBoats || s.money < cand.cost;
+    });
+    document.querySelectorAll<HTMLButtonElement>("[data-action='buy-legacy']").forEach((btn) => {
+      const cost = legacyCost(s, btn.dataset.branch as C.LegacyBranch);
+      btn.disabled = cost === null || s.reputation < cost;
+    });
     const zoneBtn = document.querySelector<HTMLButtonElement>("[data-action='unlock-zone']");
     if (zoneBtn) {
       const cost = zoneCost(s);
@@ -446,14 +531,14 @@ export class UI {
     }
     document.getElementById("rate")!.textContent = `${formatMoney(incomeRate(s))}/s · ${s.boats.length} ${s.boats.length === 1 ? "barco" : "barcos"}`;
 
-    // Sello de reputación.
+    // Sello de reputación (multiplicador sobre la reputación GANADA total).
     const stamp = document.getElementById("rep-stamp")!;
-    const show = s.reputation > 0;
+    const show = s.repEarned > 0;
     if (stamp.hidden === show) {
       stamp.hidden = !show;
     }
     if (show) {
-      document.getElementById("rep-val")!.textContent = `×${(1 + s.reputation * C.PRESTIGE_MULT_PER_REP).toFixed(2)}`;
+      document.getElementById("rep-val")!.textContent = `×${prestigeMult(s).toFixed(2)}`;
     }
 
     // Cobrar todo: visible con 2+ cargas listas.
@@ -470,7 +555,7 @@ export class UI {
     this.renderMissions(false);
 
     // ¿La estructura cambió por debajo? (compra desde otra vía, prestigio…)
-    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.managerLvl}:${s.prestiges}`;
+    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.managerLvl}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}`;
     if (sig !== this.lastStructure) {
       this.lastStructure = sig;
       if (this.sheetOpen) this.renderTab();
@@ -612,8 +697,9 @@ export class UI {
     const slot = document.getElementById("modal-slot")!;
     slot.innerHTML = `<div class="modal-backdrop"><div class="modal">
       <h2>¿Vender el puerto?</h2>
-      <p>Ganas <b>+${gain} de reputación</b> (ingresos ×${(1 + (s.reputation + gain) * C.PRESTIGE_MULT_PER_REP).toFixed(2)} para siempre).<br>
-      Pierdes: barcos, mejoras, muelle, gestor y zonas de esta vuelta.</p>
+      <p>Ganas <b>+${gain} de reputación</b> (ingresos ×${(1 + (s.repEarned + gain) * C.PRESTIGE_MULT_PER_REP).toFixed(2)} para siempre).<br>
+      Pierdes: barcos, patrones, mejoras, muelle, gestor y zonas de esta vuelta.<br>
+      Conservas: pescadoteca, logros y árbol de legado.</p>
       <div class="row">
         <button class="btn" data-action="close-modal">Todavía no</button>
         <button class="btn gold" id="prestige-yes">Vender</button>

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { SAVE_VERSION } from "../src/sim/config";
+import { BOAT_TIERS, SAVE_VERSION } from "../src/sim/config";
+
+const BOAT_TIERS_MAX = BOAT_TIERS.length - 1;
 import { deserialize, serialize } from "../src/sim/save";
 import { newGame, sanitize } from "../src/sim/state";
 import { tick } from "../src/sim/sim";
@@ -76,7 +78,7 @@ describe("save/load", () => {
     sanitize(s);
     expect(s.money).toBe(0);
     expect(s.lifetime).toBe(0);
-    expect(s.boats[0].tier).toBeLessThanOrEqual(4);
+    expect(s.boats[0].tier).toBeLessThanOrEqual(BOAT_TIERS_MAX);
     expect(Number.isFinite(s.boats[0].cargo)).toBe(true);
     expect(s.zonesUnlocked).toBe(0);
     expect(s.boats[0].phase).toBe("out");

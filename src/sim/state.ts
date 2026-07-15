@@ -13,6 +13,7 @@ export function newBoat(state: GameState, tier: number): Boat {
     phase: "out",
     phaseT: 0,
     cargo: 0,
+    skipper: null,
   };
 }
 
@@ -23,6 +24,7 @@ export function newGame(now: number, seed = 1234567): GameState {
     lifetime: 0,
     totalEarned: 0,
     reputation: 0,
+    repEarned: 0,
     prestiges: 0,
     boats: [],
     nextBoatId: 1,
@@ -38,11 +40,14 @@ export function newGame(now: number, seed = 1234567): GameState {
     order: null,
     orderT: C.ORDER_WARMUP_S,
     discovered: [],
+    tavern: { candidates: [], refreshT: C.TAVERN_REFRESH_S },
+    legacy: { astillero: 0, escuela: 0, faro: 0 },
+    achievements: [],
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
     settings: { muted: false, music: true },
-    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0 },
+    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0 },
     rngSeed: seed >>> 0,
   };
   // Empiezas con un bote heredado, ya faenando.
@@ -66,6 +71,8 @@ export function sanitize(state: GameState): GameState {
   state.lifetime = num(state.lifetime, 0);
   state.totalEarned = num(state.totalEarned, state.lifetime);
   state.reputation = Math.floor(num(state.reputation, 0, 0, 1e9));
+  // repEarned nunca puede ser menor que la reputación disponible.
+  state.repEarned = Math.max(Math.floor(num(state.repEarned, state.reputation, 0, 1e9)), state.reputation);
   state.prestiges = Math.floor(num(state.prestiges, 0, 0, 1e9));
   state.dockLevel = Math.floor(num(state.dockLevel, 0, 0, C.DOCK_MAX_LEVEL));
   state.managerLvl = Math.floor(num(state.managerLvl, 0, 0, C.MANAGER_MAX_LVL));
@@ -90,6 +97,13 @@ export function sanitize(state: GameState): GameState {
     b.cargo = num(b.cargo, 0);
     b.id = Math.floor(num(b.id, 0, 0));
     if (!["out", "fishing", "in", "ready"].includes(b.phase)) b.phase = "out";
+    // Patrón: nombre string + rasgo conocido, o fuera.
+    if (b.skipper && typeof b.skipper === "object" && typeof b.skipper.name === "string"
+        && C.TRAITS.some((t) => t.id === b.skipper!.trait)) {
+      b.skipper = { name: b.skipper.name.slice(0, 24), trait: b.skipper.trait };
+    } else {
+      b.skipper = null;
+    }
   }
   if (state.boats.length === 0) state.boats.push(newBoat(state, 0));
 
@@ -101,6 +115,27 @@ export function sanitize(state: GameState): GameState {
   if (!Array.isArray(state.discovered)) state.discovered = [];
   const known = new Set(C.SPECIES.map((s) => s.id));
   state.discovered = [...new Set(state.discovered)].filter((id) => known.has(id));
+
+  // Logros: solo ids conocidas, sin duplicados.
+  if (!Array.isArray(state.achievements)) state.achievements = [];
+  const knownAch = new Set(C.ACHIEVEMENTS.map((a) => a.id));
+  state.achievements = [...new Set(state.achievements)].filter((id) => knownAch.has(id));
+
+  // Árbol de legado.
+  if (!state.legacy || typeof state.legacy !== "object") state.legacy = { astillero: 0, escuela: 0, faro: 0 };
+  for (const b of C.LEGACY_BRANCHES) {
+    state.legacy[b.id] = Math.floor(num(state.legacy[b.id], 0, 0, C.LEGACY_MAX_LVL));
+  }
+
+  // Taberna.
+  if (!state.tavern || typeof state.tavern !== "object" || !Array.isArray(state.tavern.candidates)) {
+    state.tavern = { candidates: [], refreshT: C.TAVERN_REFRESH_S };
+  }
+  state.tavern.refreshT = num(state.tavern.refreshT, C.TAVERN_REFRESH_S, 0, 3600);
+  state.tavern.candidates = state.tavern.candidates
+    .filter((c) => c && typeof c === "object" && typeof c.name === "string" && C.TRAITS.some((t) => t.id === c.trait))
+    .slice(0, C.TAVERN_SLOTS)
+    .map((c) => ({ name: c.name.slice(0, 24), trait: c.trait, cost: num(c.cost, C.TAVERN_COST_MIN, 1) }));
 
   // Pedido de la lonja.
   state.orderT = num(state.orderT, C.ORDER_WARMUP_S, 0, 3600);
@@ -117,12 +152,15 @@ export function sanitize(state: GameState): GameState {
     state.order = null;
   }
   if (!state.stats || typeof state.stats !== "object") {
-    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0 };
+    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0 };
   }
   state.stats.collects = Math.floor(num(state.stats.collects, 0));
   state.stats.boatsBought = Math.floor(num(state.stats.boatsBought, 0));
   state.stats.upgrades = Math.floor(num(state.stats.upgrades, 0));
   state.stats.taps = Math.floor(num(state.stats.taps, 0));
+  state.stats.ordersDone = Math.floor(num(state.stats.ordersDone, 0));
+  state.stats.stormsRisked = Math.floor(num(state.stats.stormsRisked, 0));
+  state.stats.skippersHired = Math.floor(num(state.stats.skippersHired, 0));
 
   if (!Array.isArray(state.missions)) state.missions = [];
   state.missions = state.missions.filter((m) => m && typeof m === "object" && typeof m.text === "string");

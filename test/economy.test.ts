@@ -69,7 +69,8 @@ describe("fórmulas de coste", () => {
   it("la reputación multiplica ingresos", () => {
     const s = newGame(0);
     const base = incomeRate(s);
-    s.reputation = 10;
+    // v1.2: el multiplicador sale de la reputación GANADA total (repEarned).
+    s.repEarned = 10;
     expect(prestigeMult(s)).toBeCloseTo(1 + 10 * C.PRESTIGE_MULT_PER_REP);
     expect(incomeRate(s)).toBeCloseTo(base * prestigeMult(s));
   });

@@ -13,6 +13,7 @@ import type { GameState } from "./types";
  * Migraciones: índice N transforma un save de versión N a N+1.
  * v1 → v2: se añadieron stats.taps y settings (solo muted); misiones ganaron `param`.
  * v2 → v3: pedidos de la lonja (order/orderT), pescadoteca (discovered) y settings.music.
+ * v3 → v4: tripulación (skipper/taberna), árbol de legado (repEarned/legacy), logros y stats nuevas.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -35,6 +36,24 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof settings.music !== "boolean") settings.music = true;
     raw.settings = settings;
     raw.version = 3;
+  },
+  3: (raw) => {
+    // La reputación pasa a ser gastable: lo ganado hasta ahora se conserva como repEarned.
+    if (typeof raw.repEarned !== "number") raw.repEarned = typeof raw.reputation === "number" ? raw.reputation : 0;
+    if (!raw.legacy || typeof raw.legacy !== "object") raw.legacy = { astillero: 0, escuela: 0, faro: 0 };
+    if (!Array.isArray(raw.achievements)) raw.achievements = [];
+    if (!raw.tavern || typeof raw.tavern !== "object") raw.tavern = { candidates: [], refreshT: 120 };
+    if (Array.isArray(raw.boats)) {
+      for (const b of raw.boats as Record<string, unknown>[]) {
+        if (b && typeof b === "object" && b.skipper === undefined) b.skipper = null;
+      }
+    }
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.ordersDone !== "number") stats.ordersDone = 0;
+    if (typeof stats.stormsRisked !== "number") stats.stormsRisked = 0;
+    if (typeof stats.skippersHired !== "number") stats.skippersHired = 0;
+    raw.stats = stats;
+    raw.version = 4;
   },
 };
 

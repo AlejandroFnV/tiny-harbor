@@ -162,6 +162,75 @@ export const BOATS: Sprite[] = [
     "...IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII.....",
     "....IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII.......",
   ]),
+  // 5 · Palangrero — casco alto, doble cabina y línea de boyas a popa
+  sprite("palangrero", L_BOAT, [
+    "..MM..MM..MM.........................CC......",
+    "...I...I...I........................CCC......",
+    "...IIIIIIIII........................I........",
+    "...RRRRRRR..........................I........",
+    "...RPPPPPR..........................I........",
+    "...RPWWWPR.....RRRRRR...............I........",
+    "...RPPPPPR.....RPPPPR...............I........",
+    "..PPPPPPPPP....RPWWPR...............I........",
+    "..PWWIIIWWP....RPPPPR...............I........",
+    "..PPPPPPPPP...PPPPPPPP..............I........",
+    "..PPPPPPPPP...PWWIIWWP..............I........",
+    "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII.",
+    "IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII",
+    ".IHFFFFHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI.",
+    ".IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI..",
+    "..IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI...",
+    "...IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII....",
+    "....IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII......",
+  ]),
+  // 6 · Atunero — torre vigía alta + grúa de red (los atuneros de verdad la llevan)
+  sprite("atunero", L_BOAT, [
+    ".........II..........................CC......",
+    ".........II.........................CCC......",
+    "......RRRRRRR.......................I........",
+    "......RPWWWPR.......................I........",
+    "......RRRRRRR..........II...........I........",
+    ".........II.............II.........I........",
+    ".........II..............II........I........",
+    ".........II...............II.......I........",
+    "...RRRRRRRRRR...............II......I........",
+    "...RPPPPPPPPR................II.....I........",
+    "...RPWWWWWWPR.................I.....I........",
+    "...RPPPPPPPPR.................I.....I........",
+    "..PPPPPPPPPPPP................I.....I........",
+    "..PWWIIIIIIWWP................I.....I........",
+    "..PPPPPPPPPPPP................I.....I........",
+    "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
+    "IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII",
+    ".IHFFFFFHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI.",
+    ".IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI..",
+    "..IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI...",
+    "...IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII....",
+    "....IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII......",
+  ]),
+  // 7 · Buque factoría — superestructura de tres alturas + dos chimeneas humeantes
+  sprite("factoria", L_BOAT, [
+    "....RR....RR.........................CC......",
+    "....RR....RR........................CCC......",
+    "....RR....RR........................I........",
+    "..RRRRRRRRRRRR......................I........",
+    "..RPPPPPPPPPPR......................I........",
+    "..RPWWWWWWWWPR......................I........",
+    "..RPPPPPPPPPPR......................I........",
+    ".PPPPPPPPPPPPPP.......MMMM..........I........",
+    ".PWWIIWWIIWWIIP.......MIIM..........I........",
+    ".PPPPPPPPPPPPPP.....MMMMMMMM........I........",
+    ".PPPPPPPPPPPPPP.....MIIMMIIM........I........",
+    ".PPPPPPPPPPPPPP.....MMMMMMMM........I........",
+    "IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII",
+    "IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII",
+    "IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI.",
+    ".IHFFFFFFHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI.",
+    ".IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI..",
+    "..IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHI...",
+    "...IHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHII....",
+    "....IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII......",
+  ]),
 ];
 
 // --- carga lista para cobrar -------------------------------------------------
@@ -476,6 +545,21 @@ const SPECIES_ART: Record<string, { shape: keyof typeof FISH_SHAPES; color: stri
   rape: { shape: "angler", color: "#8a6a50" },
   pezdragon: { shape: "eel", color: "#50647d" },
   calamargigante: { shape: "squid", color: "#c06858" },
+  // La Fosa
+  sable: { shape: "sword", color: "#b8c4d4" },
+  granadero: { shape: "long", color: "#77706a" },
+  pelicano: { shape: "eel", color: "#454f66" },
+  duende: { shape: "shark", color: "#c99aa4" },
+  // Mar de Hielo
+  bacalao: { shape: "long", color: "#8fa8b8" },
+  fletan: { shape: "ray", color: "#3d4a52" },
+  pezhielo: { shape: "small", color: "#cfe4ec" },
+  loboartico: { shape: "angler", color: "#6a7f95" },
+  // El Fin del Mapa
+  emperador: { shape: "big", color: "#c08838" },
+  medusaeterna: { shape: "round", color: "#d8a8c8" },
+  pezremo: { shape: "eel", color: "#d44a4a" },
+  kraken: { shape: "squid", color: "#5e3a52" },
 };
 
 const fishURLCache = new Map<string, string>();
@@ -547,6 +631,77 @@ export function raster(
   rasterCache.set(key, cv);
   if (rasterCache.size > 600) rasterCache.clear(); // techo de memoria, se regenera solo
   return cv;
+}
+
+// ---------------------------------------------------------------------------
+// Retratos de patrón (taberna): cara pixel procedural, determinista por nombre
+// ---------------------------------------------------------------------------
+const SKIN_TONES = ["#e8b88a", "#d49a6a", "#b87c50", "#96603c"];
+const HAT_COLORS = ["#e3664b", "#eab14e", "#2d3754", "#5b8c5a", "#4a7ba6"];
+const BEARD_COLORS = ["#8a8577", "#5f4b34", "#3a3428", "#b8b2a2"];
+
+function nameHash(name: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+const portraitCache = new Map<string, string>();
+
+/** Retrato pixel 12×13 del patrón (gorro + cara + barba según el nombre). */
+export function skipperPortraitURL(name: string): string {
+  const hit = portraitCache.get(name);
+  if (hit) return hit;
+  const h = nameHash(name);
+  const skin = SKIN_TONES[h % SKIN_TONES.length];
+  const hat = HAT_COLORS[(h >> 2) % HAT_COLORS.length];
+  const beard = (h >> 4) % 3; // 0 = afeitado, 1 = corta, 2 = cerrada
+  const beardCol = BEARD_COLORS[(h >> 6) % BEARD_COLORS.length];
+  const hatStyle = (h >> 8) % 3; // 0 = gorro lana, 1 = sueste, 2 = gorra capitán
+  const ink = "#2b3245";
+  const jersey = (h >> 10) % 2 ? "#2d3754" : "#4a7ba6";
+
+  const W = 12, H = 13, s = 4;
+  const cv = document.createElement("canvas");
+  cv.width = W * s;
+  cv.height = H * s;
+  const ctx = cv.getContext("2d")!;
+  ctx.imageSmoothingEnabled = false;
+  const px = (x: number, y: number, c: string) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x * s, y * s, s, s);
+  };
+  const row = (x0: number, x1: number, y: number, c: string) => {
+    for (let x = x0; x <= x1; x++) px(x, y, c);
+  };
+
+  // Gorro (filas 0-3)
+  if (hatStyle === 0) {
+    row(4, 7, 0, hat); row(3, 8, 1, hat); row(3, 8, 2, hat); row(2, 9, 3, ink);
+  } else if (hatStyle === 1) {
+    row(4, 7, 1, hat); row(3, 8, 2, hat); row(1, 10, 3, hat);
+  } else {
+    row(3, 8, 1, "#f2e8d5"); row(3, 8, 2, ink); row(2, 9, 3, ink);
+  }
+  // Cara (filas 4-8)
+  for (let y = 4; y <= 8; y++) row(3, 8, y, skin);
+  px(4, 5, ink); px(7, 5, ink); // ojos
+  px(5, 7, "#c97b6a"); px(6, 7, "#c97b6a"); // nariz/mejilla
+  // Barba (filas 8-9)
+  if (beard >= 1) { row(3, 8, 8, beardCol); }
+  if (beard === 2) { row(4, 7, 9, beardCol); }
+  else if (beard === 1) { px(5, 9, skin); px(6, 9, skin); }
+  else { row(4, 7, 9, skin); }
+  // Jersey (filas 10-12)
+  row(3, 8, 10, jersey); row(2, 9, 11, jersey); row(2, 9, 12, jersey);
+  row(4, 7, 10, (h >> 12) % 2 ? "#f2e8d5" : jersey); // cuello a rayas a veces
+
+  const url = cv.toDataURL();
+  portraitCache.set(name, url);
+  return url;
 }
 
 /** Miniatura de barco para la UI (dataURL, escala fija, día). */

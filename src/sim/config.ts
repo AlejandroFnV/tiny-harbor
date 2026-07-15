@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -38,6 +38,9 @@ export const BOAT_TIERS: BoatTierDef[] = [
   { id: "trainera",   name: "Trainera",   baseCost: 4_000,   cycle: 38, baseCargo: 900,     hull: "#4a7ba6", size: 1.7 },
   { id: "pesquero",   name: "Pesquero",   baseCost: 50_000,  cycle: 48, baseCargo: 8_500,   hull: "#8a5aa6", size: 2.2 },
   { id: "arrastrero", name: "Arrastrero", baseCost: 650_000, cycle: 60, baseCargo: 140_000, hull: "#a65a5a", size: 2.8 },
+  { id: "palangrero", name: "Palangrero", baseCost: 8_000_000, cycle: 72, baseCargo: 2_200_000, hull: "#3f8f7a", size: 3.1 },
+  { id: "atunero", name: "Atunero", baseCost: 110_000_000, cycle: 85, baseCargo: 36_000_000, hull: "#5464a8", size: 3.4 },
+  { id: "factoria", name: "Buque factoría", baseCost: 1_500_000_000, cycle: 100, baseCargo: 550_000_000, hull: "#8a4a68", size: 3.8 },
 ];
 
 /** Nº máximo de barcos totales (rendimiento móvil + legibilidad de escena). */
@@ -76,6 +79,9 @@ export const ZONES: ZoneDef[] = [
   { id: "bajio",   name: "Bajío",     unlockCost: 10_000,    valueMult: 4.5, distMult: 1.5 },
   { id: "altamar", name: "Alta mar",  unlockCost: 150_000,   valueMult: 10,  distMult: 1.8 },
   { id: "abismo",  name: "Abismo",    unlockCost: 2_500_000, valueMult: 22,  distMult: 2.2 },
+  { id: "fosa",    name: "La Fosa",   unlockCost: 40_000_000, valueMult: 48, distMult: 2.6 },
+  { id: "hielo",   name: "Mar de Hielo", unlockCost: 700_000_000, valueMult: 105, distMult: 3.0 },
+  { id: "confin",  name: "El Fin del Mapa", unlockCost: 12_000_000_000, valueMult: 240, distMult: 3.4 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -225,6 +231,123 @@ export const SPECIES: SpeciesDef[] = [
   { id: "rape", name: "Rape abisal", zone: 4, rarity: "comun" },
   { id: "pezdragon", name: "Pez dragón", zone: 4, rarity: "rara" },
   { id: "calamargigante", name: "Calamar gigante", zone: 4, rarity: "epica" },
+  // La Fosa
+  { id: "sable", name: "Pez sable", zone: 5, rarity: "comun" },
+  { id: "granadero", name: "Granadero", zone: 5, rarity: "comun" },
+  { id: "pelicano", name: "Pez pelícano", zone: 5, rarity: "rara" },
+  { id: "duende", name: "Tiburón duende", zone: 5, rarity: "epica" },
+  // Mar de Hielo
+  { id: "bacalao", name: "Bacalao ártico", zone: 6, rarity: "comun" },
+  { id: "fletan", name: "Fletán negro", zone: 6, rarity: "comun" },
+  { id: "pezhielo", name: "Pez hielo", zone: 6, rarity: "rara" },
+  { id: "loboartico", name: "Pez lobo ártico", zone: 6, rarity: "epica" },
+  // El Fin del Mapa
+  { id: "emperador", name: "Atún emperador", zone: 7, rarity: "comun" },
+  { id: "medusaeterna", name: "Medusa eterna", zone: 7, rarity: "comun" },
+  { id: "pezremo", name: "Pez remo", zone: 7, rarity: "rara" },
+  { id: "kraken", name: "Kraken", zone: 7, rarity: "epica" },
+];
+
+// ---------------------------------------------------------------------------
+// Tripulación (patrones de la taberna) — un patrón por barco, se va al prestigiar
+// ---------------------------------------------------------------------------
+export type TraitId = "rapido" | "redes" | "lobo" | "ojo" | "pregonero";
+
+export interface TraitDef {
+  id: TraitId;
+  name: string;
+  /** Descripción corta para la carta de la taberna. */
+  desc: string;
+}
+
+export const TRAITS: TraitDef[] = [
+  { id: "rapido", name: "Manos rápidas", desc: "Su barco navega un 25% más rápido" },
+  { id: "redes", name: "Redes dobles", desc: "Su barco trae un 30% más de carga" },
+  { id: "lobo", name: "Lobo de mar", desc: "Su barco nunca pierde carga en tormenta" },
+  { id: "ojo", name: "Ojo avizor", desc: "Triple probabilidad de descubrir especies" },
+  { id: "pregonero", name: "Pregonero", desc: "Su pesca cuenta un 60% más en pedidos" },
+];
+
+/** Efectos de rasgo (los usa economy/sim). */
+export const TRAIT_SPEED_BONUS = 0.25;
+export const TRAIT_CARGO_BONUS = 0.3;
+export const TRAIT_SPECIES_MULT = 3;
+export const TRAIT_ORDER_MULT = 1.6;
+
+/** Nombres de patrones (pool; el retrato sale del nombre). */
+export const SKIPPER_NAMES = [
+  "Marcial", "Sole", "Tano", "Chelo", "Curro", "Maruxa", "Peio", "Lola",
+  "Anxo", "Reme", "Fermín", "Pura", "Xoel", "Custodia", "Bartolo", "Milagros",
+  "Cosme", "Petra", "Ulises", "Amparo", "Genaro", "Balbina", "Saturio", "Nieves",
+];
+
+/** La taberna abre cuando tienes este nº de barcos. */
+export const TAVERN_MIN_BOATS = 2;
+/** Candidatos simultáneos en la taberna. */
+export const TAVERN_SLOTS = 2;
+/** Segundos hasta que llega un candidato nuevo a un asiento vacío. */
+export const TAVERN_REFRESH_S = 120;
+/** Coste de fichar = max(min, incomeRate × estos segundos). */
+export const TAVERN_COST_SECONDS = 100;
+export const TAVERN_COST_MIN = 250;
+
+// ---------------------------------------------------------------------------
+// Árbol de legado (se compra con reputación; PERSISTE entre prestigios)
+// ---------------------------------------------------------------------------
+export type LegacyBranch = "astillero" | "escuela" | "faro";
+
+export interface LegacyDef {
+  id: LegacyBranch;
+  name: string;
+  /** Descripción del efecto POR NIVEL. */
+  desc: string;
+}
+
+export const LEGACY_BRANCHES: LegacyDef[] = [
+  { id: "astillero", name: "Astillero familiar", desc: "+10% de carga en toda la flota" },
+  { id: "escuela", name: "Escuela de navegación", desc: "+8% de velocidad en toda la flota" },
+  { id: "faro", name: "El Faro Viejo", desc: "+2h de cofre offline y +35% de encontrar especies" },
+];
+
+/** Coste en reputación de cada nivel (índice = nivel a comprar - 1). */
+export const LEGACY_COSTS = [1, 2, 4, 7, 12];
+export const LEGACY_MAX_LVL = LEGACY_COSTS.length;
+
+export const LEGACY_ASTILLERO_CARGO = 0.1;
+export const LEGACY_ESCUELA_SPEED = 0.08;
+export const LEGACY_FARO_OFFLINE_S = 2 * 3600;
+export const LEGACY_FARO_SPECIES = 0.35;
+
+// ---------------------------------------------------------------------------
+// Logros (permanentes, sobreviven al prestigio; cada uno +2% de ingresos)
+// ---------------------------------------------------------------------------
+export const ACHIEVEMENT_INCOME_BONUS = 0.02;
+
+export interface AchievementDef {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+/** Las condiciones viven en sim.ts (funciones puras sobre el estado). */
+export const ACHIEVEMENTS: AchievementDef[] = [
+  { id: "flota5", name: "Media flota", desc: "Ten 5 barcos a la vez" },
+  { id: "flotafull", name: "Puerto lleno", desc: "Ocupa los 14 amarres" },
+  { id: "pesquero1", name: "Palabras mayores", desc: "Bota un pesquero" },
+  { id: "factoria1", name: "Industria pesada", desc: "Bota un buque factoría" },
+  { id: "altamar", name: "Sin miedo", desc: "Faena en Alta mar" },
+  { id: "confin", name: "El Fin del Mapa", desc: "Desbloquea el último caladero" },
+  { id: "millon", name: "Primer millón", desc: "Gana 1M en total" },
+  { id: "billon", name: "Leyenda de la lonja", desc: "Gana 1B en total" },
+  { id: "prestigio1", name: "Empezar de cero", desc: "Vende tu primer puerto" },
+  { id: "prestigio5", name: "Serial vendedor", desc: "Vende 5 puertos" },
+  { id: "peces10", name: "Coleccionista", desc: "Descubre 10 especies" },
+  { id: "pecesall", name: "Pescadoteca completa", desc: "Descubre TODAS las especies" },
+  { id: "taps100", name: "Dedos de acero", desc: "100 taps a bancos de peces" },
+  { id: "pedidos10", name: "Cliente fiel", desc: "Entrega 10 pedidos de la lonja" },
+  { id: "tormentas5", name: "Temerario", desc: "Aguanta 5 tormentas faenando" },
+  { id: "patrones3", name: "Casa llena", desc: "Ficha 3 patrones en la taberna" },
+  { id: "legado1", name: "Herencia", desc: "Compra tu primera mejora de legado" },
 ];
 
 // ---------------------------------------------------------------------------

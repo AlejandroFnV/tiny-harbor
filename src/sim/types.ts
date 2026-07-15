@@ -1,6 +1,14 @@
 /** Tipos del estado de juego. Todo serializable a JSON (save). */
 
+import type { LegacyBranch, TraitId } from "./config";
+
 export type BoatPhase = "out" | "fishing" | "in" | "ready";
+
+/** Patrón contratado en la taberna. Vive en su barco; se va al prestigiar. */
+export interface Skipper {
+  name: string;
+  trait: TraitId;
+}
 
 export interface Boat {
   id: number;
@@ -13,6 +21,14 @@ export interface Boat {
   phaseT: number;
   /** Valor de la carga cuando phase === "ready" (fijado al llegar). */
   cargo: number;
+  skipper: Skipper | null;
+}
+
+/** Candidato esperando en la taberna. El coste se fija al aparecer. */
+export interface TavernCandidate {
+  name: string;
+  trait: TraitId;
+  cost: number;
 }
 
 export type MissionKind =
@@ -22,6 +38,7 @@ export type MissionKind =
   | "earn"         // gana X monedas (esta vuelta)
   | "unlock_zone"  // desbloquea la zona Z
   | "hire_manager" // contrata/sube gestor
+  | "hire_skipper" // ficha un patrón en la taberna
   | "dock";        // amplía el muelle
 
 export interface Mission {
@@ -70,7 +87,10 @@ export interface GameState {
   lifetime: number;
   /** Ganancias acumuladas totales (histórico, stats). */
   totalEarned: number;
+  /** Reputación DISPONIBLE (se gasta en el árbol de legado). */
   reputation: number;
+  /** Reputación ganada total (nunca baja; de aquí sale el multiplicador). */
+  repEarned: number;
   prestiges: number;
 
   boats: Boat[];
@@ -97,6 +117,13 @@ export interface GameState {
   /** Pescadoteca: ids de especies descubiertas. PERSISTE entre prestigios. */
   discovered: string[];
 
+  /** Taberna: candidatos a patrón. Se resetea al prestigiar. */
+  tavern: { candidates: TavernCandidate[]; refreshT: number };
+  /** Árbol de legado: nivel por rama. PERSISTE entre prestigios. */
+  legacy: Record<LegacyBranch, number>;
+  /** Logros conseguidos (ids). PERSISTEN entre prestigios. */
+  achievements: string[];
+
   /** Reloj de pared (ms epoch) de la última vez que se vio el juego (offline calc). */
   lastSeen: number;
   /** Tiempo total jugado (s, esta vuelta). */
@@ -104,7 +131,15 @@ export interface GameState {
   tutorialStep: number;
 
   settings: { muted: boolean; music: boolean };
-  stats: { collects: number; boatsBought: number; upgrades: number; taps: number };
+  stats: {
+    collects: number;
+    boatsBought: number;
+    upgrades: number;
+    taps: number;
+    ordersDone: number;
+    stormsRisked: number;
+    skippersHired: number;
+  };
   rngSeed: number;
 }
 
@@ -120,4 +155,6 @@ export type SimEvent =
   | { kind: "order_offer"; goal: number; reward: number }
   | { kind: "order_done"; reward: number }
   | { kind: "order_gone" }
-  | { kind: "species_found"; id: string };
+  | { kind: "species_found"; id: string }
+  | { kind: "skipper_hired"; name: string; boatId: number }
+  | { kind: "achievement"; id: string };

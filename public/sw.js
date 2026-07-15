@@ -3,7 +3,9 @@
  * Primera visita → todo lo que se pide queda cacheado; después el juego
  * funciona 100% offline (la partida vive en localStorage, no aquí).
  */
-const CACHE = "tiny-harbor-v1";
+// Subir la versión invalida el caché viejo en el próximo check del SW (así
+// llegan las updates a las PWA instaladas: cache-first jamás revalida solo).
+const CACHE = "tiny-harbor-v2";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/"])));
