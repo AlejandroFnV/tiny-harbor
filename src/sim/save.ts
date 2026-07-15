@@ -16,6 +16,7 @@ import type { GameState } from "./types";
  * v3 → v4: tripulación (skipper/taberna), árbol de legado (repEarned/legacy), logros y stats nuevas.
  * v4 → v5: rebalance del prestigio (sqrt→cbrt): la reputación vieja se convierte a la
  *          escala nueva (rep^(2/3), mismo lifetime equivalente); lonja, racha y stats nuevas.
+ * v5 → v6: mercado de la lonja, cofres a la deriva, expediciones y reliquias.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -79,6 +80,19 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof stats.goldenCatches !== "number") stats.goldenCatches = 0;
     raw.stats = stats;
     raw.version = 5;
+  },
+  5: (raw) => {
+    raw.market = { mult: 1, t: 15, dir: 0 };
+    raw.drift = null;
+    if (typeof raw.driftT !== "number") raw.driftT = 300;
+    raw.expedition = null;
+    if (!Array.isArray(raw.relics)) raw.relics = [];
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.driftsTapped !== "number") stats.driftsTapped = 0;
+    if (typeof stats.expeditionsDone !== "number") stats.expeditionsDone = 0;
+    if (typeof stats.soldHigh !== "number") stats.soldHigh = 0;
+    raw.stats = stats;
+    raw.version = 6;
   },
 };
 

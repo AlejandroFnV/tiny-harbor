@@ -257,6 +257,44 @@ export const BUBBLE = sprite("bubble", { I: "ink", P: "white", M: "must" }, [
   ".....P.....",
 ]);
 
+// --- cofres a la deriva (3 rarezas: madera / hierro / oro) -----------------------
+export const DRIFT_CHESTS: Sprite[] = [
+  sprite("chestWood", { I: "ink", D: "wood", d: "wood2", F: "foam" }, [
+    ".IIIIIII.",
+    "IDDDDDDDI",
+    "IDDdIdDDI",
+    "IdddIdddI",
+    ".IIIIIII.",
+    "..FF.FF..",
+  ]),
+  sprite("chestIron", { I: "ink", R: "roof", P: "paper", F: "foam" }, [
+    ".IIIIIII.",
+    "IRRPRPRRI",
+    "IRRPIPRRI",
+    "IPPPIPPPI",
+    ".IIIIIII.",
+    "..FF.FF..",
+  ]),
+  sprite("chestGold", { I: "ink", M: "must", W: "white", F: "foam" }, [
+    ".IIIIIII.",
+    "IMMWMWMMI",
+    "IMMWIWMMI",
+    "IWWWIWWWI",
+    ".IIIIIII.",
+    "..FF.FF..",
+  ]),
+];
+
+// --- ballena ambiental (silueta que cruza el mar de fondo) ------------------------
+export const WHALE = sprite("whale", { I: "ink", F: "foam" }, [
+  "......................",
+  "...........IIIIIII...I",
+  ".....IIIIIIIIIIIIIII.I",
+  "..IIIIIIIIIIIIIIIIIIII",
+  "IIIIIIIIIIIIIIIIIIII..",
+  "..FF...........FF.....",
+]);
+
 // --- pueblo -------------------------------------------------------------------
 const L_TOWN = { I: "ink", P: "paper", W: "win", C: "coral", M: "must", R: "roof", D: "wood", d: "wood2", F: "white", G: "seaFg" };
 

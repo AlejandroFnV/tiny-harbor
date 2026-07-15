@@ -146,7 +146,7 @@ describe("migración v4 → v5 (rebalance del prestigio)", () => {
     expect(s.lonjaLvl).toBe(0);
     expect(s.combo.n).toBe(0);
     expect(s.stats.bestCombo).toBe(0);
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(C.SAVE_VERSION);
   });
 
   it("un save v4 sin reputación migra a idéntico estado jugable", () => {
@@ -158,6 +158,6 @@ describe("migración v4 → v5 (rebalance del prestigio)", () => {
     expect(s.repEarned).toBe(0);
     expect(s.reputation).toBe(0);
     expect(s.boats.length).toBe(1);
-    expect(s.version).toBe(5);
+    expect(s.version).toBe(C.SAVE_VERSION);
   });
 });

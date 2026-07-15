@@ -10,11 +10,16 @@ import {
   canPrestige,
   capUpgradeCost,
   cargoValue,
+  comboMax,
   comboMult,
   cycleTime,
   dockCost,
   eventMult,
+  expeditionBooty,
+  expeditionDuration,
+  hasRelic,
   incomeRate,
+  isAway,
   legacyCost,
   lonjaCost,
   managerCost,
@@ -81,6 +86,7 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
   // Cobro manual: bonifica la racha viva y puede salir dorado (×3).
   if (!auto) {
     amount *= comboMult(state);
+    if (state.market.mult >= C.MARKET_HIGH) state.stats.soldHigh++;
     if (nextRand(state) < C.GOLDEN_CHANCE) {
       amount *= C.GOLDEN_MULT;
       state.stats.goldenCatches++;
@@ -120,6 +126,7 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
 
   for (const boat of state.boats) {
     if (boat.phase === "ready") continue; // esperando cobro
+    if (isAway(state, boat.id)) continue; // de expedición: su ciclo no corre
     if (sheltered) continue; // refugiados: el ciclo se pausa
     boat.phaseT += dt;
     // Puede cruzar varias fases en un dt grande (offline/catch-up).
@@ -155,11 +162,20 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
     let guard = 20;
     while (state.managerT <= 0 && guard-- > 0) {
       state.managerT += interval;
-      const ready = state.boats.find((b) => b.phase === "ready");
+      const ready = state.boats.find((b) => b.phase === "ready" && !isAway(state, b.id));
       if (ready) collectBoatInternal(state, ready, true, events);
     }
     if (state.managerT < 0) state.managerT = 0;
   }
+
+  // Mercado de la lonja: paseo aleatorio con retorno a ×1 ---------------------
+  tickMarket(state, dt);
+
+  // Cofres a la deriva ---------------------------------------------------------
+  tickDrift(state, dt, events);
+
+  // Expedición: el barco vuelve con el botín -----------------------------------
+  tickExpedition(state, dt, events);
 
   // Eventos aleatorios --------------------------------------------------------
   tickEvent(state, dt, events);
@@ -174,6 +190,96 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
   tickAchievements(state, events);
 
   return events;
+}
+
+function tickMarket(state: GameState, dt: number): void {
+  state.market.t -= dt;
+  let guard = 40; // catch-up acotado en dt grandes (offline corto)
+  while (state.market.t <= 0 && guard-- > 0) {
+    state.market.t += C.MARKET_STEP_S;
+    const prev = state.market.mult;
+    const step = (nextRand(state) * 2 - 1) * C.MARKET_VOLATILITY + (1 - prev) * C.MARKET_REVERSION;
+    state.market.mult = Math.min(C.MARKET_MAX, Math.max(C.MARKET_MIN, prev + step));
+    state.market.dir = state.market.mult > prev ? 1 : state.market.mult < prev ? -1 : 0;
+  }
+  if (state.market.t < 0) state.market.t = 0;
+}
+
+/** Elige una reliquia aún no poseída (o null si están todas). */
+function rollRelic(state: GameState): string | null {
+  const missing = C.RELICS.filter((r) => !state.relics.includes(r.id));
+  if (missing.length === 0) return null;
+  return missing[Math.floor(nextRand(state) * missing.length)].id;
+}
+
+function grantRelic(state: GameState, events: SimEvent[]): void {
+  const id = rollRelic(state);
+  if (!id) return;
+  state.relics.push(id);
+  events.push({ kind: "relic_found", id });
+}
+
+function tickDrift(state: GameState, dt: number, events: SimEvent[]): void {
+  const drift = state.drift;
+  if (drift) {
+    drift.remaining -= dt;
+    if (drift.remaining <= 0) {
+      state.drift = null;
+      scheduleDrift(state);
+      events.push({ kind: "drift_gone" });
+    }
+    return;
+  }
+  if (state.playTime < C.DRIFT_WARMUP_S) return;
+  state.driftT -= dt;
+  if (state.driftT > 0) return;
+  // Rareza por pesos (madera/hierro/oro).
+  const total = C.DRIFT_KINDS.reduce((s, k) => s + k.weight, 0);
+  let roll = nextRand(state) * total;
+  let kind = 0;
+  for (let i = 0; i < C.DRIFT_KINDS.length; i++) {
+    roll -= C.DRIFT_KINDS[i].weight;
+    if (roll <= 0) {
+      kind = i;
+      break;
+    }
+  }
+  state.drift = { kind, x: 0.12 + nextRand(state) * 0.76, remaining: C.DRIFT_LIFETIME_S };
+  state.driftT = 0;
+  events.push({ kind: "drift_spawn", drift: kind });
+}
+
+function scheduleDrift(state: GameState): void {
+  let t = C.DRIFT_INTERVAL_MIN_S + nextRand(state) * (C.DRIFT_INTERVAL_MAX_S - C.DRIFT_INTERVAL_MIN_S);
+  if (hasRelic(state, "mapapirata")) t *= C.RELIC_DRIFT_FREQ;
+  state.driftT = t;
+}
+
+function tickExpedition(state: GameState, dt: number, events: SimEvent[]): void {
+  const exp = state.expedition;
+  if (!exp) return;
+  exp.remaining -= dt;
+  if (exp.remaining > 0) return;
+  completeExpedition(state, events);
+}
+
+/** Cierra la expedición activa: paga botín, tira reliquia y trae el barco. */
+export function completeExpedition(state: GameState, events: SimEvent[]): void {
+  const exp = state.expedition;
+  if (!exp) return;
+  state.expedition = null; // antes del botín: el barco vuelve a contar
+  const boat = state.boats.find((b) => b.id === exp.boatId);
+  if (!boat) return;
+  const def = C.EXPEDITIONS[exp.def];
+  const booty = expeditionBooty(state, boat, exp.def);
+  gainMoney(state, booty, events);
+  state.stats.expeditionsDone++;
+  if (nextRand(state) < def.relicChance) grantRelic(state, events);
+  boat.phase = "out";
+  boat.phaseT = 0;
+  boat.cargo = 0;
+  events.push({ kind: "expedition_done", boatId: boat.id, amount: booty });
+  events.push({ kind: "depart", boatId: boat.id });
 }
 
 function tickTavern(state: GameState, dt: number): void {
@@ -216,6 +322,12 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   lonja5: (s) => s.lonjaLvl >= 5,
   racha10: (s) => s.stats.bestCombo >= 10,
   dorado5: (s) => s.stats.goldenCatches >= 5,
+  cofres10: (s) => s.stats.driftsTapped >= 10,
+  expedicion1: (s) => s.stats.expeditionsDone >= 1,
+  expediciones5: (s) => s.stats.expeditionsDone >= 5,
+  reliquias6: (s) => s.relics.length >= 6,
+  reliquias12: (s) => s.relics.length >= C.RELICS.length,
+  lonjero: (s) => s.stats.soldHigh >= 30,
 };
 
 function tickAchievements(state: GameState, events: SimEvent[]): void {
@@ -246,7 +358,8 @@ function tickOrder(state: GameState, dt: number, events: SimEvent[]): void {
   if (state.orderT > 0) return;
   state.orderT = 0;
   const goal = Math.max(C.ORDER_GOAL_MIN, Math.ceil(incomeRate(state) * C.ORDER_GOAL_SECONDS));
-  const reward = Math.ceil(goal * C.ORDER_REWARD_FACTOR);
+  const rewardFactor = C.ORDER_REWARD_FACTOR * (hasRelic(state, "caracola") ? 1 + C.RELIC_ORDER_BONUS : 1);
+  const reward = Math.ceil(goal * rewardFactor);
   state.order = { stage: "offer", goal, progress: 0, remaining: C.ORDER_OFFER_S, reward };
   events.push({ kind: "order_offer", goal, reward });
 }
@@ -297,14 +410,43 @@ export interface ActionResult {
 
 /** Alarga la racha de cobro manual (un eslabón por ACCIÓN, no por barco). */
 function bumpCombo(state: GameState): void {
-  state.combo.n = Math.min(C.COMBO_MAX, state.combo.n + 1);
+  state.combo.n = Math.min(comboMax(state), state.combo.n + 1);
   state.combo.t = C.COMBO_WINDOW_S;
   if (state.combo.n > state.stats.bestCombo) state.stats.bestCombo = state.combo.n;
 }
 
+/** Tap al cofre a la deriva: recompensa según rareza (el oro puede traer reliquia). */
+export function tapDrift(state: GameState, events: SimEvent[] = []): ActionResult {
+  const drift = state.drift;
+  if (!drift) return { ok: false, reason: "no_drift" };
+  const def = C.DRIFT_KINDS[drift.kind];
+  const gained = Math.max(def.floor, incomeRate(state) * def.seconds);
+  state.drift = null;
+  scheduleDrift(state);
+  gainMoney(state, gained, events);
+  state.stats.driftsTapped++;
+  if (drift.kind === 2 && nextRand(state) < C.DRIFT_GOLD_RELIC_CHANCE) grantRelic(state, events);
+  events.push({ kind: "drift_reward", drift: drift.kind, amount: gained });
+  return { ok: true, gained };
+}
+
+/** Zarpa la expedición `defIndex` con el barco más valioso (queda fuera hasta volver). */
+export function startExpedition(state: GameState, defIndex: number, events: SimEvent[] = []): ActionResult {
+  if (defIndex < 0 || defIndex >= C.EXPEDITIONS.length) return { ok: false, reason: "bad_def" };
+  if (state.expedition) return { ok: false, reason: "busy" };
+  if (state.boats.length < C.EXPEDITION_MIN_BOATS) return { ok: false, reason: "few_boats" };
+  const boat = state.boats.reduce((a, b) => (cargoValue(state, b) > cargoValue(state, a) ? b : a));
+  state.expedition = { boatId: boat.id, def: defIndex, remaining: expeditionDuration(state, defIndex) };
+  boat.phase = "out";
+  boat.phaseT = 0;
+  boat.cargo = 0;
+  bumpMission(state, "expedition", 1, events);
+  return { ok: true };
+}
+
 export function collectBoat(state: GameState, boatId: number, events: SimEvent[] = []): ActionResult {
   const boat = state.boats.find((b) => b.id === boatId);
-  if (!boat || boat.phase !== "ready") return { ok: false, reason: "not_ready" };
+  if (!boat || boat.phase !== "ready" || isAway(state, boatId)) return { ok: false, reason: "not_ready" };
   bumpCombo(state);
   const gained = collectBoatInternal(state, boat, false, events);
   return { ok: true, gained };
@@ -312,11 +454,11 @@ export function collectBoat(state: GameState, boatId: number, events: SimEvent[]
 
 /** Cobra todos los barcos listos (botón "cobrar todo" del gestor manual). */
 export function collectAll(state: GameState, events: SimEvent[] = []): ActionResult {
-  if (!state.boats.some((b) => b.phase === "ready")) return { ok: false, reason: "none_ready" };
+  if (!state.boats.some((b) => b.phase === "ready" && !isAway(state, b.id))) return { ok: false, reason: "none_ready" };
   bumpCombo(state);
   let gained = 0;
   for (const boat of state.boats) {
-    if (boat.phase === "ready") gained += collectBoatInternal(state, boat, false, events);
+    if (boat.phase === "ready" && !isAway(state, boat.id)) gained += collectBoatInternal(state, boat, false, events);
   }
   return { ok: true, gained };
 }
@@ -344,13 +486,13 @@ export function upgradeBoat(
   if (!boat) return { ok: false, reason: "no_boat" };
   if (what === "speed") {
     if (boat.speedLvl >= C.SPEED_MAX_LVL) return { ok: false, reason: "max" };
-    const cost = speedUpgradeCost(boat);
+    const cost = speedUpgradeCost(boat, state);
     if (state.money < cost) return { ok: false, reason: "poor" };
     state.money -= cost;
     boat.speedLvl++;
   } else {
     if (boat.capLvl >= C.CAP_MAX_LVL) return { ok: false, reason: "max" };
-    const cost = capUpgradeCost(boat);
+    const cost = capUpgradeCost(boat, state);
     if (state.money < cost) return { ok: false, reason: "poor" };
     state.money -= cost;
     boat.capLvl++;
@@ -502,7 +644,11 @@ export function doPrestige(state: GameState, now: number): ActionResult {
   state.order = null;
   state.orderT = C.ORDER_WARMUP_S;
   state.tavern = { candidates: [], refreshT: C.TAVERN_REFRESH_S };
-  // NO se resetean: discovered (pescadoteca), legacy, achievements, repEarned.
+  state.drift = null;
+  state.driftT = C.DRIFT_WARMUP_S;
+  state.expedition = null; // el barco se vende con el puerto, botín incluido
+  // NO se resetean: discovered (pescadoteca), legacy, achievements, repEarned,
+  // relics (reliquias) ni market (el precio de la lonja es del mundo, no tuyo).
   state.playTime = 0;
   state.lastSeen = now;
   rollMissions(state);

@@ -288,6 +288,47 @@ body {
   50% { transform: rotate(-3deg) scale(1.07); }
 }
 
+/* Ticker del mercado de la lonja (dentro de la tarjeta del dinero). */
+.market-chip {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.market-chip.up { color: #3e7d4f; }
+.market-chip.down { color: #b04a35; }
+.market-chip.hot { color: #b07d18; animation: combo-pulse 0.9s ease-in-out infinite; display: inline-block; }
+
+/* Barco fuera de expedición: fila atenuada. */
+.boat-row.away { opacity: 0.6; }
+
+.expedition-card .bar {
+  margin-top: 6px;
+  height: 6px;
+  background: rgba(43, 50, 69, 0.15);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.expedition-card .bar i {
+  display: block;
+  height: 100%;
+  background: var(--coral);
+  border-radius: 3px;
+}
+
+/* Hold-to-repeat en táctil: sin esto, el navegador convierte la pulsación
+   larga en gesto de scroll (pointercancel) o selección y la ráfaga muere. */
+.ups .btn,
+[data-action="up-lonja"] {
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 /* ---------- misiones ---------- */
 .missions-btn {
   position: absolute;

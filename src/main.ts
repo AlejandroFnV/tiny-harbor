@@ -23,6 +23,8 @@ import {
   hireManager,
   hireSkipper,
   resolveStorm,
+  startExpedition,
+  tapDrift,
   tapShoal,
   tick,
   unlockZone,
@@ -30,6 +32,7 @@ import {
   upgradeDock,
   upgradeLonja,
 } from "./sim/sim";
+import { formatMoney } from "./sim/format";
 import { newGame } from "./sim/state";
 import type { GameState, SimEvent } from "./sim/types";
 import { Renderer } from "./render/renderer";
@@ -102,6 +105,24 @@ function handleEvents(events: SimEvent[]): void {
         renderer.particles.spark(window.innerWidth / 2, window.innerHeight * 0.55, 18, "#dfa93e");
         break;
       }
+      case "drift_spawn":
+        audio.play("event");
+        if (ev.drift === 2) ui.toast("¡Un cofre de ORO flota en el agua!");
+        break;
+      case "relic_found": {
+        const r = C.RELICS.find((x) => x.id === ev.id);
+        if (r) {
+          ui.toast(`Reliquia: ${r.name} — ${r.desc}. Para siempre.`);
+          audio.play("prestige");
+          renderer.particles.confetti(window.innerWidth / 2, window.innerHeight * 0.35, 34);
+        }
+        break;
+      }
+      case "expedition_done":
+        ui.toast(`El barco nº${ev.boatId} vuelve de expedición: +${formatMoney(ev.amount)}.`);
+        audio.play("chest");
+        renderer.particles.confetti(window.innerWidth * 0.5, window.innerHeight * 0.6, 24);
+        break;
       case "species_found": {
         const sp = C.SPECIES.find((x) => x.id === ev.id);
         if (sp) {
@@ -158,6 +179,16 @@ const actions = {
     if (upgradeLonja(state, events).ok) {
       audio.play("buy");
       ui.toast(`La lonja crece: +${Math.round(state.lonjaLvl * C.LONJA_INCOME_BONUS * 100)}% de ingresos esta vuelta.`);
+      persist();
+    } else audio.play("error");
+    handleEvents(events);
+    ui.renderTab();
+  },
+  startExpedition(defIndex: number) {
+    const events: SimEvent[] = [];
+    if (startExpedition(state, defIndex, events).ok) {
+      audio.play("prestige");
+      ui.toast(`${C.EXPEDITIONS[defIndex].name}: tu mejor barco pone rumbo mar adentro.`);
       persist();
     } else audio.play("error");
     handleEvents(events);
@@ -283,6 +314,15 @@ function canvasTap(x: number, y: number): void {
       renderer.particles.float(hit.x, hit.y - 20, `+${Math.round(r.gained!)}`, "#dfa93e");
       renderer.particles.fish(hit.x, hit.y);
       renderer.particles.splash(hit.x, hit.y, 8);
+    }
+  } else if (hit.type === "drift") {
+    const r = tapDrift(state, events);
+    if (r.ok) {
+      audio.play("chest");
+      renderer.particles.float(hit.x, hit.y - 24, `+${formatMoney(r.gained!)}`, "#dfa93e");
+      renderer.particles.splash(hit.x, hit.y, 12);
+      const t = ui.coinTarget();
+      renderer.particles.coins(hit.x, hit.y, t.x, t.y, 10);
     }
   }
   handleEvents(events);

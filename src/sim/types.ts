@@ -40,7 +40,8 @@ export type MissionKind =
   | "hire_manager" // contrata/sube gestor
   | "hire_skipper" // ficha un patrón en la taberna
   | "dock"         // amplía el muelle
-  | "lonja";       // amplía la lonja
+  | "lonja"        // amplía la lonja
+  | "expedition";  // manda un barco de expedición
 
 export interface Mission {
   id: number;
@@ -130,6 +131,19 @@ export interface GameState {
   /** Racha de cobro manual: eslabones y segundos de vida que le quedan. */
   combo: { n: number; t: number };
 
+  /** Mercado de la lonja: precio vivo (mult), timer del paso y dirección del último paso. */
+  market: { mult: number; t: number; dir: number };
+
+  /** Cofre a la deriva visible (o null) y segundos hasta el próximo. */
+  drift: { kind: number; x: number; remaining: number } | null;
+  driftT: number;
+
+  /** Expedición activa: barco fuera y segundos que le quedan. */
+  expedition: { boatId: number; def: number; remaining: number } | null;
+
+  /** Reliquias del pecio (ids). PERSISTEN entre prestigios. */
+  relics: string[];
+
   /** Reloj de pared (ms epoch) de la última vez que se vio el juego (offline calc). */
   lastSeen: number;
   /** Tiempo total jugado (s, esta vuelta). */
@@ -147,6 +161,9 @@ export interface GameState {
     skippersHired: number;
     bestCombo: number;
     goldenCatches: number;
+    driftsTapped: number;
+    expeditionsDone: number;
+    soldHigh: number;
   };
   rngSeed: number;
 }
@@ -166,4 +183,9 @@ export type SimEvent =
   | { kind: "species_found"; id: string }
   | { kind: "skipper_hired"; name: string; boatId: number }
   | { kind: "achievement"; id: string }
-  | { kind: "golden"; boatId: number; amount: number };
+  | { kind: "golden"; boatId: number; amount: number }
+  | { kind: "drift_spawn"; drift: number }
+  | { kind: "drift_reward"; drift: number; amount: number }
+  | { kind: "drift_gone" }
+  | { kind: "relic_found"; id: string }
+  | { kind: "expedition_done"; boatId: number; amount: number };

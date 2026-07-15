@@ -1,7 +1,8 @@
 /** Ganancia offline: "mientras no estabas…". */
 
 import * as C from "./config";
-import { cargoValue, incomeRate, offlineCapSeconds } from "./economy";
+import { cargoValue, expeditionBooty, incomeRate, isAway, offlineCapSeconds } from "./economy";
+import { nextRand } from "./rng";
 import type { GameState } from "./types";
 
 export interface OfflineResult {
@@ -34,12 +35,35 @@ export function applyOffline(state: GameState, now: number): OfflineResult {
   let earned = incomeRate(state) * seconds * eff;
   if (!Number.isFinite(earned) || earned < 0) earned = 0;
 
+  // Expedición: su reloj es de pared (sin cap). Si terminó fuera, el botín entra al cofre.
+  const exp = state.expedition;
+  if (exp) {
+    exp.remaining -= rawSeconds;
+    if (exp.remaining <= 0) {
+      state.expedition = null;
+      const boat = state.boats.find((b) => b.id === exp.boatId);
+      if (boat) {
+        const booty = expeditionBooty(state, boat, exp.def);
+        if (Number.isFinite(booty) && booty > 0) {
+          earned += booty;
+          state.stats.expeditionsDone++;
+        }
+        // La reliquia también llega si la expedición terminó estando fuera.
+        if (nextRand(state) < C.EXPEDITIONS[exp.def].relicChance) {
+          const missing = C.RELICS.filter((r) => !state.relics.includes(r.id));
+          if (missing.length > 0) state.relics.push(missing[Math.floor(nextRand(state) * missing.length)].id);
+        }
+      }
+    }
+  }
+
   state.money += earned;
   state.lifetime += earned;
   state.totalEarned += earned;
 
   // Al volver, la flota está amarrada con carga fresca lista para cobrar.
   for (const boat of state.boats) {
+    if (isAway(state, boat.id)) continue; // sigue de expedición
     boat.phase = "ready";
     boat.phaseT = 0;
     boat.cargo = cargoValue(state, boat);

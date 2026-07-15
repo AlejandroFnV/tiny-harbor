@@ -45,11 +45,16 @@ export function newGame(now: number, seed = 1234567): GameState {
     legacy: { astillero: 0, escuela: 0, faro: 0 },
     achievements: [],
     combo: { n: 0, t: 0 },
+    market: { mult: 1, t: C.MARKET_STEP_S, dir: 0 },
+    drift: null,
+    driftT: C.DRIFT_WARMUP_S,
+    expedition: null,
+    relics: [],
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
     settings: { muted: false, music: true },
-    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0 },
+    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0 },
     rngSeed: seed >>> 0,
   };
   // Empiezas con un bote heredado, ya faenando.
@@ -130,10 +135,43 @@ export function sanitize(state: GameState): GameState {
     state.legacy[b.id] = Math.floor(num(state.legacy[b.id], 0, 0, C.LEGACY_MAX_LVL));
   }
 
-  // Racha de cobro.
+  // Racha de cobro (el tope real puede ser mayor con el mascarón).
   if (!state.combo || typeof state.combo !== "object") state.combo = { n: 0, t: 0 };
-  state.combo.n = Math.floor(num(state.combo.n, 0, 0, C.COMBO_MAX));
+  state.combo.n = Math.floor(num(state.combo.n, 0, 0, C.COMBO_MAX + C.RELIC_COMBO_EXTRA));
   state.combo.t = num(state.combo.t, 0, 0, C.COMBO_WINDOW_S);
+
+  // Mercado de la lonja.
+  if (!state.market || typeof state.market !== "object") state.market = { mult: 1, t: C.MARKET_STEP_S, dir: 0 };
+  state.market.mult = num(state.market.mult, 1, C.MARKET_MIN, C.MARKET_MAX);
+  state.market.t = num(state.market.t, C.MARKET_STEP_S, 0, C.MARKET_STEP_S);
+  state.market.dir = state.market.dir === 1 ? 1 : state.market.dir === -1 ? -1 : 0;
+
+  // Cofre a la deriva.
+  state.driftT = num(state.driftT, C.DRIFT_WARMUP_S, 0, 3600);
+  if (state.drift && typeof state.drift === "object") {
+    state.drift.kind = Math.floor(num(state.drift.kind, 0, 0, C.DRIFT_KINDS.length - 1));
+    state.drift.x = num(state.drift.x, 0.5, 0, 1);
+    state.drift.remaining = num(state.drift.remaining, 0, 0, C.DRIFT_LIFETIME_S);
+    if (state.drift.remaining <= 0) state.drift = null;
+  } else {
+    state.drift = null;
+  }
+
+  // Expedición: el barco debe existir; si no, se anula sin drama.
+  if (state.expedition && typeof state.expedition === "object") {
+    const e = state.expedition;
+    e.def = Math.floor(num(e.def, 0, 0, C.EXPEDITIONS.length - 1));
+    e.boatId = Math.floor(num(e.boatId, -1, -1));
+    e.remaining = num(e.remaining, 0, 0, C.EXPEDITIONS[C.EXPEDITIONS.length - 1].dur);
+    if (!state.boats.some((b) => b.id === e.boatId)) state.expedition = null;
+  } else {
+    state.expedition = null;
+  }
+
+  // Reliquias: solo ids conocidas, sin duplicados.
+  if (!Array.isArray(state.relics)) state.relics = [];
+  const knownRelics = new Set(C.RELICS.map((r) => r.id));
+  state.relics = [...new Set(state.relics)].filter((id) => knownRelics.has(id));
 
   // Taberna.
   if (!state.tavern || typeof state.tavern !== "object" || !Array.isArray(state.tavern.candidates)) {
@@ -160,7 +198,7 @@ export function sanitize(state: GameState): GameState {
     state.order = null;
   }
   if (!state.stats || typeof state.stats !== "object") {
-    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0 };
+    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0 };
   }
   state.stats.collects = Math.floor(num(state.stats.collects, 0));
   state.stats.boatsBought = Math.floor(num(state.stats.boatsBought, 0));
@@ -169,8 +207,11 @@ export function sanitize(state: GameState): GameState {
   state.stats.ordersDone = Math.floor(num(state.stats.ordersDone, 0));
   state.stats.stormsRisked = Math.floor(num(state.stats.stormsRisked, 0));
   state.stats.skippersHired = Math.floor(num(state.stats.skippersHired, 0));
-  state.stats.bestCombo = Math.floor(num(state.stats.bestCombo, 0, 0, C.COMBO_MAX));
+  state.stats.bestCombo = Math.floor(num(state.stats.bestCombo, 0, 0, C.COMBO_MAX + C.RELIC_COMBO_EXTRA));
   state.stats.goldenCatches = Math.floor(num(state.stats.goldenCatches, 0));
+  state.stats.driftsTapped = Math.floor(num(state.stats.driftsTapped, 0));
+  state.stats.expeditionsDone = Math.floor(num(state.stats.expeditionsDone, 0));
+  state.stats.soldHigh = Math.floor(num(state.stats.soldHigh, 0));
 
   if (!Array.isArray(state.missions)) state.missions = [];
   state.missions = state.missions.filter((m) => m && typeof m === "object" && typeof m.text === "string");

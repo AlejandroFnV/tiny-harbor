@@ -10,8 +10,12 @@ import {
   boatCost,
   canPrestige,
   capUpgradeCost,
+  cargoValue,
   dockCost,
+  expeditionBooty,
+  expeditionDuration,
   incomeRate,
+  isAway,
   legacyCost,
   lonjaCost,
   managerCost,
@@ -33,6 +37,7 @@ export interface UIActions {
   upgradeBoat(boatId: number, what: "speed" | "cap"): void;
   upgradeDock(): void;
   upgradeLonja(): void;
+  startExpedition(defIndex: number): void;
   hireManager(): void;
   hireSkipper(index: number): void;
   buyLegacy(branch: C.LegacyBranch): void;
@@ -105,6 +110,7 @@ export class UI {
         <div class="money-card" id="money-card">
           <div class="amount"><span id="money">0</span></div>
           <div class="rate" id="rate">0/s</div>
+          <div class="market-chip" id="market-chip" title="Precio de la lonja: sube y baja solo. Cobra caro."><span id="market-arrow">→</span> lonja <b id="market-val">×1.00</b></div>
         </div>
         <div class="top-actions">
           <div class="combo-stamp" id="combo-stamp" hidden><span id="combo-val">×1.0</span><small>RACHA</small></div>
@@ -210,6 +216,7 @@ export class UI {
       case "up-cap": this.act.upgradeBoat(id, "cap"); break;
       case "up-dock": this.act.upgradeDock(); break;
       case "up-lonja": this.act.upgradeLonja(); break;
+      case "start-expedition": this.act.startExpedition(Number(el.dataset.exp)); break;
       case "hire-manager": this.act.hireManager(); break;
       case "hire-skipper": this.act.hireSkipper(Number(el.dataset.index)); break;
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
@@ -300,10 +307,11 @@ export class UI {
       const chip = b.skipper
         ? `<span class="skipper-chip" title="${tr?.desc ?? ""}"><img src="${skipperPortraitURL(b.skipper.name)}" alt="">${b.skipper.name} · ${tr?.name ?? ""}</span>`
         : "";
-      html += `<div class="boat-row" data-boat="${b.id}">
+      const away = isAway(s, b.id);
+      html += `<div class="boat-row ${away ? "away" : ""}" data-boat="${b.id}">
         <div class="head">
           <span class="name">${t.name} <small>nº${b.id}</small></span>
-          <span class="status" data-status></span>
+          <span class="status" data-status>${away ? "de expedición" : ""}</span>
         </div>
         ${chip}
         <div class="ups">
@@ -423,6 +431,38 @@ export class UI {
       </div>`;
     });
     html += `</div><p style="font-size:12px;color:var(--ink-soft);padding:0 4px">La flota entera faena en el caladero más lejano: más lejos, mejor pesca y especies más raras.</p>`;
+
+    // Expediciones: botín gordo diferido a cambio de quedarte sin tu mejor barco.
+    html += `<div class="section-title">EXPEDICIONES</div>`;
+    if (s.expedition) {
+      const exp = s.expedition;
+      const def = C.EXPEDITIONS[exp.def];
+      const boat = s.boats.find((b) => b.id === exp.boatId);
+      const total = expeditionDuration(s, exp.def);
+      const pct = Math.min(100, ((total - exp.remaining) / total) * 100);
+      html += `<div class="card expedition-card">
+        <div class="info">
+          <div class="name">${def.name} — ${boat ? C.BOAT_TIERS[boat.tier].name : "barco"} nº${exp.boatId}</div>
+          <div class="desc">Vuelve en <span data-exp-remaining>${formatDuration(exp.remaining)}</span> con el botín.</div>
+          <div class="bar"><i data-exp-bar style="width:${pct}%"></i></div>
+        </div>
+      </div>`;
+    } else if (s.boats.length < C.EXPEDITION_MIN_BOATS) {
+      html += `<div class="card"><div class="info"><div class="name">El muelle manda</div>
+        <div class="desc">Con ${C.EXPEDITION_MIN_BOATS}+ barcos podrás mandar uno de expedición sin dejar el puerto vacío.</div></div></div>`;
+    } else {
+      const best = s.boats.reduce((a, b) => (cargoValue(s, b) > cargoValue(s, a) ? b : a));
+      C.EXPEDITIONS.forEach((def, i) => {
+        const booty = expeditionBooty(s, best, i);
+        html += `<div class="card">
+          <div class="info">
+            <div class="name">${def.name} <small>${formatDuration(expeditionDuration(s, i))}</small></div>
+            <div class="desc">Tu mejor barco vuelve con ~${formatMoney(booty)} (×${def.factor} de su pesca)${def.relicChance >= 1 ? " y una RELIQUIA segura" : def.relicChance >= 0.2 ? " y quizá una reliquia" : ""}.</div>
+          </div>
+          <button class="btn primary" data-action="start-expedition" data-exp="${i}">Zarpar</button>
+        </div>`;
+      });
+    }
     return html;
   }
 
@@ -462,6 +502,22 @@ export class UI {
             : `<button class="btn primary" data-action="buy-legacy" data-branch="${br.id}">Nivel ${lvl + 1}<span class="sub">${cost} rep</span></button>`}
         </div>`;
       }
+    }
+
+    // Reliquias del pecio: colección permanente con bonus únicos.
+    html += `<div class="section-title">RELIQUIAS DEL PECIO (${s.relics.length}/${C.RELICS.length})</div>`;
+    if (s.relics.length === 0 && s.stats.expeditionsDone === 0) {
+      html += `<div class="card"><div class="info"><div class="name">El mar guarda secretos</div>
+        <div class="desc">Expediciones y cofres de oro traen reliquias: bonus únicos que no se pierden ni vendiendo el puerto.</div></div></div>`;
+    } else {
+      html += `<div class="ach-grid relic-grid">`;
+      for (const r of C.RELICS) {
+        const got = s.relics.includes(r.id);
+        html += `<div class="ach ${got ? "got" : ""}" title="${r.desc}">
+          <b>${got ? "◆" : "◇"}</b><span>${got ? r.name : "???"}</span>
+        </div>`;
+      }
+      html += `</div>`;
     }
 
     // Logros: permanentes, +2% de ingresos cada uno.
@@ -506,11 +562,11 @@ export class UI {
       const boat = s.boats.find((b) => b.id === id);
       if (!boat) return;
       const status = row.querySelector<HTMLElement>("[data-status]")!;
-      status.textContent = PHASE_TEXT[boat.phase];
-      status.classList.toggle("ready", boat.phase === "ready");
+      status.textContent = isAway(s, boat.id) ? "de expedición" : PHASE_TEXT[boat.phase];
+      status.classList.toggle("ready", boat.phase === "ready" && !isAway(s, boat.id));
       const [spd, cap] = row.querySelectorAll<HTMLButtonElement>(".ups .btn");
-      const sc = speedUpgradeCost(boat);
-      const cc = capUpgradeCost(boat);
+      const sc = speedUpgradeCost(boat, s);
+      const cc = capUpgradeCost(boat, s);
       const sMax = boat.speedLvl >= C.SPEED_MAX_LVL;
       const cMax = boat.capLvl >= C.CAP_MAX_LVL;
       spd.querySelector("[data-cost-label]")!.textContent = sMax ? "" : formatMoney(sc);
@@ -562,6 +618,17 @@ export class UI {
     const lifeEl = document.querySelector("[data-live='lifetime']");
     if (lifeEl) lifeEl.textContent = formatMoney(s.lifetime);
 
+    // Expedición en curso: cuenta atrás y barra sin re-render.
+    if (this.activeTab === "mapa" && s.expedition) {
+      const rem = document.querySelector("[data-exp-remaining]");
+      if (rem) rem.textContent = formatDuration(s.expedition.remaining);
+      const bar = document.querySelector<HTMLElement>("[data-exp-bar]");
+      if (bar) {
+        const total = expeditionDuration(s, s.expedition.def);
+        bar.style.width = `${Math.min(100, ((total - s.expedition.remaining) / total) * 100)}%`;
+      }
+    }
+
     // El botón de prestigio cambia de estado sin re-render completo.
     if (this.activeTab === "prestigio") {
       const pBtn = document.querySelector<HTMLButtonElement>("[data-action='prestige']");
@@ -597,6 +664,18 @@ export class UI {
     }
     document.getElementById("rate")!.textContent = `${formatMoney(incomeRate(s))}/s · ${s.boats.length} ${s.boats.length === 1 ? "barco" : "barcos"}`;
 
+    // Ticker del mercado de la lonja.
+    const mv = document.getElementById("market-val")!;
+    const txt = `×${s.market.mult.toFixed(2)}`;
+    if (mv.textContent !== txt) {
+      mv.textContent = txt;
+      document.getElementById("market-arrow")!.textContent = s.market.dir > 0 ? "↑" : s.market.dir < 0 ? "↓" : "→";
+      const chip = document.getElementById("market-chip")!;
+      chip.classList.toggle("up", s.market.mult >= 1.1);
+      chip.classList.toggle("down", s.market.mult <= 0.9);
+      chip.classList.toggle("hot", s.market.mult >= C.MARKET_HIGH);
+    }
+
     // Sello de reputación (multiplicador sobre la reputación GANADA total).
     const stamp = document.getElementById("rep-stamp")!;
     const show = s.repEarned > 0;
@@ -630,7 +709,7 @@ export class UI {
     this.renderMissions(false);
 
     // ¿La estructura cambió por debajo? (compra desde otra vía, prestigio…)
-    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.lonjaLvl}:${s.managerLvl}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}`;
+    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.lonjaLvl}:${s.managerLvl}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}:${s.expedition?.boatId ?? "-"}:${s.relics.length}`;
     if (sig !== this.lastStructure) {
       this.lastStructure = sig;
       if (this.sheetOpen) this.renderTab();

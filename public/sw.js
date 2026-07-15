@@ -3,9 +3,11 @@
  * Primera visita → todo lo que se pide queda cacheado; después el juego
  * funciona 100% offline (la partida vive en localStorage, no aquí).
  */
-// Subir la versión invalida el caché viejo en el próximo check del SW (así
-// llegan las updates a las PWA instaladas: cache-first jamás revalida solo).
-const CACHE = "tiny-harbor-v3";
+// La versión del caché se ESTAMPA en cada build desde package.json (plugin
+// sw-cache-stamp en vite.config.ts): cache-first jamás revalida solo, y un
+// deploy sin bump dejaba a las PWA instaladas congeladas en el bundle viejo.
+// Este valor solo es el placeholder de desarrollo.
+const CACHE = "tiny-harbor-dev";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(["/"])));

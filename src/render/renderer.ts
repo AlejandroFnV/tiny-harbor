@@ -19,6 +19,7 @@ import {
   CLOUDS,
   CRATE_PILE,
   CRATES,
+  DRIFT_CHESTS,
   GULL_A,
   GULL_B,
   HOUSE,
@@ -32,6 +33,7 @@ import {
   raster,
   SUN,
   WAREHOUSE,
+  WHALE,
   type PixelPalette,
   type Sprite,
 } from "./sprites";
@@ -45,7 +47,7 @@ interface Gull {
 }
 
 export interface HitResult {
-  type: "boat" | "shoal";
+  type: "boat" | "shoal" | "drift";
   boatId?: number;
   x: number;
   y: number;
@@ -77,6 +79,8 @@ export class Renderer {
   private glints: { x: number; y: number; ph: number }[] = [];
   private boatRects = new Map<number, { x: number; y: number; r: number }>();
   private shoalPos = { x: 0, y: 0 };
+  private driftPos = { x: 0, y: 0 };
+  private whale = { x: -30, dir: 1, active: false, timer: 40 };
   private lastTownKey = "";
   private lastTownCount = 0;
   private clientVisible = false;
@@ -175,6 +179,12 @@ export class Renderer {
       const r = 62;
       if (dx * dx + dy * dy < r * r) return { type: "shoal", x: this.shoalPos.x, y: this.shoalPos.y };
     }
+    if (state.drift) {
+      const dx = pxX - this.driftPos.x;
+      const dy = pxY - this.driftPos.y;
+      const r = 46;
+      if (dx * dx + dy * dy < r * r) return { type: "drift", x: this.driftPos.x, y: this.driftPos.y };
+    }
     for (const [id, r] of this.boatRects) {
       const dx = pxX - r.x;
       const dy = pxY - r.y;
@@ -259,13 +269,18 @@ export class Renderer {
     this.drawSea(g, pal, storm);
     this.updateGulls(dt, night, storm, g);
 
+    this.drawWhale(g, dt, night);
+
     // Barcos por profundidad (y ascendente = más lejos primero).
     this.boatRects.clear();
+    const away = state.expedition?.boatId ?? -1;
     const order = state.boats
+      .filter((b) => b.id !== away) // el barco de expedición está mar adentro
       .map((boat, idx) => ({ boat, idx, pos: this.boatArtPos(state, boat, idx) }))
       .sort((a, b) => a.pos.y - b.pos.y);
-    for (const { boat, pos } of order) this.drawBoat(g, boat, pos, step, pal);
+    for (const { boat, pos } of order) this.drawBoat(g, boat, pos, step, pal, state.prestiges);
 
+    this.drawDrift(g, state, pal);
     this.drawFrenzy(g, state, dt, pal);
     this.clientVisible = state.order !== null;
     this.drawPier(g, pal, step, night);
@@ -439,6 +454,7 @@ export class Renderer {
     pos: { x: number; y: number },
     step: number,
     pal: PixelPalette,
+    prestiges = 0,
   ): void {
     const spr = BOATS[Math.min(boat.tier, BOATS.length - 1)];
     const flip = boat.phase === "in"; // vuelve mirando a puerto
@@ -476,6 +492,20 @@ export class Renderer {
 
     g.drawImage(img, x, y);
 
+    // Banderín de armador: recuerdo visible de los puertos vendidos.
+    // 1+: coral · 4+: dorado · 10+: doble banderín.
+    if (prestiges >= 1) {
+      const mastX = pos.x + (flip ? -1 : 1);
+      const wave = Math.sin(this.t * 5 + boat.id) > 0 ? 1 : 0;
+      g.fillStyle = prestiges >= 4 ? pal.must : pal.coral;
+      g.fillRect(mastX + wave, y - 2, 2, 1);
+      g.fillRect(mastX, y - 1, 2, 1);
+      if (prestiges >= 10) {
+        g.fillStyle = pal.coral;
+        g.fillRect(mastX + wave, y - 4, 2, 1);
+      }
+    }
+
     // Línea de flotación: 1px de espuma pegado al casco.
     g.fillStyle = pal.foam;
     g.globalAlpha = 0.5;
@@ -501,6 +531,65 @@ export class Renderer {
       }
       const bounce = Math.round(Math.abs(Math.sin(this.t * 3)) * 3);
       g.drawImage(raster(BUBBLE, step), pos.x - Math.floor(BUBBLE.w / 2), topY - BUBBLE.h - 2 - bounce);
+    }
+  }
+
+  // --- cofre a la deriva ---------------------------------------------------------
+  private drawDrift(g: CanvasRenderingContext2D, state: GameState, pal: PixelPalette): void {
+    const drift = state.drift;
+    if (!drift) return;
+    const spr = DRIFT_CHESTS[Math.min(drift.kind, DRIFT_CHESTS.length - 1)];
+    const cx = Math.round(this.aw * drift.x);
+    const cy = Math.round(this.horizonY + this.seaH * 0.62 + Math.sin(this.t * 1.8) * 1.5);
+    this.driftPos = { x: cx * this.px, y: cy * this.px };
+
+    // Se hunde: parpadea los últimos 5 s.
+    if (drift.remaining < 5 && Math.sin(this.t * 8) < 0) return;
+
+    g.drawImage(raster(spr, 0), cx - Math.floor(spr.w / 2), cy - spr.h + 2);
+    // Anillo de atención (mismo lenguaje que el banco de peces, discreto).
+    const rx = 12;
+    const ry = 5;
+    g.fillStyle = drift.kind === 2 ? pal.must : pal.foam;
+    const spin = this.t * 1.1;
+    for (let i = 0; i < 10; i++) {
+      if (i % 2 === 0) continue;
+      const a = (i / 10) * Math.PI * 2 + spin;
+      g.fillRect(cx + Math.round(Math.cos(a) * rx) - 1, cy + Math.round(Math.sin(a) * ry), 2, 1);
+    }
+    // Destello dorado del cofre de oro.
+    if (drift.kind === 2 && Math.sin(this.t * 6) > 0.6) {
+      g.fillStyle = pal.white;
+      g.fillRect(cx - 1, cy - spr.h - 1, 1, 1);
+      g.fillRect(cx + 2, cy - spr.h + 1, 1, 1);
+    }
+  }
+
+  // --- ballena ambiental (silueta lejana, puro sabor) ------------------------------
+  private drawWhale(g: CanvasRenderingContext2D, dt: number, night: number): void {
+    const w = this.whale;
+    if (!w.active) {
+      w.timer -= dt;
+      if (w.timer <= 0) {
+        w.active = true;
+        w.dir = Math.random() < 0.5 ? 1 : -1;
+        w.x = w.dir === 1 ? -WHALE.w : this.aw + WHALE.w;
+      }
+      return;
+    }
+    w.x += w.dir * 3.2 * dt;
+    if (w.x < -WHALE.w - 10 || w.x > this.aw + WHALE.w + 10) {
+      w.active = false;
+      w.timer = 90 + Math.random() * 120;
+      return;
+    }
+    const y = this.horizonY + Math.round(this.seaH * 0.16 + Math.sin(this.t * 0.7) * 1.5);
+    g.globalAlpha = 0.5 - night * 0.2;
+    g.drawImage(raster(WHALE, NIGHT_STEPS), Math.round(w.x), y);
+    g.globalAlpha = 1;
+    // Chorro intermitente.
+    if (Math.sin(this.t * 1.1) > 0.75) {
+      this.particles.splash((w.x + WHALE.w * (w.dir === 1 ? 0.82 : 0.18)) * this.px, (y - 1) * this.px, 3);
     }
   }
 

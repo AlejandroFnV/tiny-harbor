@@ -91,6 +91,13 @@ const TEMPLATES: Template[] = [
       return { param: 0, target: 1, text: "Amplía la lonja" };
     },
   },
+  {
+    kind: "expedition",
+    make: (s) => {
+      if (s.boats.length < C.EXPEDITION_MIN_BOATS || s.expedition) return null;
+      return { param: 0, target: 1, text: "Manda un barco de expedición" };
+    },
+  },
 ];
 
 function makeMission(state: GameState): Mission | null {

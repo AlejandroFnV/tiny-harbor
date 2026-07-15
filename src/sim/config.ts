@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -172,6 +172,95 @@ export const COMBO_MAX = 15;
 /** Probabilidad por cobro MANUAL de que la carga sea dorada (×GOLDEN_MULT). */
 export const GOLDEN_CHANCE = 0.03;
 export const GOLDEN_MULT = 3;
+
+// ---------------------------------------------------------------------------
+// Mercado de la lonja (precio vivo) — el timing de venta importa
+// ---------------------------------------------------------------------------
+/** Segundos entre pasos del precio. */
+export const MARKET_STEP_S = 15;
+/** Amplitud del paso aleatorio y fuerza de retorno a ×1. */
+export const MARKET_VOLATILITY = 0.09;
+export const MARKET_REVERSION = 0.06;
+export const MARKET_MIN = 0.7;
+export const MARKET_MAX = 1.5;
+/** Umbral de "precio alto" para el logro de vender caro. */
+export const MARKET_HIGH = 1.35;
+
+// ---------------------------------------------------------------------------
+// Cofres a la deriva (objeto tapeable en el agua)
+// ---------------------------------------------------------------------------
+export const DRIFT_WARMUP_S = 300;
+export const DRIFT_INTERVAL_MIN_S = 150;
+export const DRIFT_INTERVAL_MAX_S = 300;
+/** Segundos que el objeto flota antes de hundirse. */
+export const DRIFT_LIFETIME_S = 22;
+/** Rarezas: madera / hierro / oro. Recompensa = income × segundos (con suelo). */
+export const DRIFT_KINDS = [
+  { id: "madera", name: "Cofre de madera", seconds: 25, floor: 60, weight: 68 },
+  { id: "hierro", name: "Cofre de hierro", seconds: 150, floor: 400, weight: 26 },
+  { id: "oro", name: "Cofre de oro", seconds: 900, floor: 2500, weight: 6 },
+] as const;
+/** Prob. de que un cofre de ORO traiga además una reliquia no poseída. */
+export const DRIFT_GOLD_RELIC_CHANCE = 0.25;
+
+// ---------------------------------------------------------------------------
+// Expediciones (mandas tu mejor barco fuera: botín gordo diferido)
+// ---------------------------------------------------------------------------
+export interface ExpeditionDef {
+  id: string;
+  name: string;
+  /** Duración en segundos de juego (corre también offline). */
+  dur: number;
+  /** Botín = (carga/ciclo del barco) × dur × factor. */
+  factor: number;
+  /** Prob. de traer una reliquia no poseída. */
+  relicChance: number;
+}
+
+export const EXPEDITIONS: ExpeditionDef[] = [
+  { id: "marea", name: "Con la marea", dur: 5 * 60, factor: 1.4, relicChance: 0.08 },
+  { id: "travesia", name: "Travesía", dur: 20 * 60, factor: 1.9, relicChance: 0.3 },
+  { id: "odisea", name: "Odisea", dur: 60 * 60, factor: 2.6, relicChance: 1 },
+];
+/** Barcos mínimos para poder zarpar (el puerto no se queda vacío). */
+export const EXPEDITION_MIN_BOATS = 2;
+
+// ---------------------------------------------------------------------------
+// Reliquias del pecio (colección permanente; bonus únicos, sobreviven al prestigio)
+// ---------------------------------------------------------------------------
+export interface RelicDef {
+  id: string;
+  name: string;
+  desc: string;
+}
+
+export const RELICS: RelicDef[] = [
+  { id: "brujula", name: "Brújula de latón", desc: "+6% de velocidad en toda la flota" },
+  { id: "redvieja", name: "Red del abuelo", desc: "+6% de carga en toda la flota" },
+  { id: "moneda", name: "Doblón antiguo", desc: "+4% de ingresos" },
+  { id: "catalejo", name: "Catalejo rayado", desc: "+60% de probabilidad de especies" },
+  { id: "anclaoro", name: "Ancla dorada", desc: "Mejoras de barco un 12% más baratas" },
+  { id: "timon", name: "Timón de roble", desc: "Expediciones un 15% más cortas" },
+  { id: "caracola", name: "Caracola cantora", desc: "Pedidos de la lonja: bono +30%" },
+  { id: "mapapirata", name: "Mapa pirata", desc: "Cofres a la deriva casi el doble de frecuentes" },
+  { id: "farolillo", name: "Farolillo de tormenta", desc: "+45 min de cofre offline" },
+  { id: "mascaron", name: "Mascarón de sirena", desc: "La racha aguanta 4 eslabones más" },
+  { id: "colmillo", name: "Colmillo de kraken", desc: "+25% de ingresos faenando en tormenta" },
+  { id: "perlanegra", name: "Perla negra", desc: "+1% de ingresos por puerto vendido" },
+];
+
+export const RELIC_SPEED = 0.06;
+export const RELIC_CARGO = 0.06;
+export const RELIC_INCOME = 0.04;
+export const RELIC_SPECIES = 0.6;
+export const RELIC_UPGRADE_DISCOUNT = 0.12;
+export const RELIC_EXPEDITION_TIME = 0.15;
+export const RELIC_ORDER_BONUS = 0.3;
+export const RELIC_DRIFT_FREQ = 0.55;
+export const RELIC_OFFLINE_S = 45 * 60;
+export const RELIC_COMBO_EXTRA = 4;
+export const RELIC_STORM_BONUS = 0.25;
+export const RELIC_PRESTIGE_INCOME = 0.01;
 
 // ---------------------------------------------------------------------------
 // Eventos aleatorios
@@ -392,6 +481,12 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "lonja5", name: "Puesto fijo", desc: "Amplía la lonja 5 veces" },
   { id: "racha10", name: "Manos de mercado", desc: "Encadena una racha de 10 cobros" },
   { id: "dorado5", name: "Toque de Midas", desc: "Pesca 5 capturas doradas" },
+  { id: "cofres10", name: "Ojos en el agua", desc: "Pesca 10 cofres a la deriva" },
+  { id: "expedicion1", name: "Mar adentro", desc: "Completa tu primera expedición" },
+  { id: "expediciones5", name: "Cartas de otro mar", desc: "Completa 5 expediciones" },
+  { id: "reliquias6", name: "Vitrina del pecio", desc: "Reúne 6 reliquias" },
+  { id: "reliquias12", name: "Museo del puerto", desc: "Reúne TODAS las reliquias" },
+  { id: "lonjero", name: "Olfato de lonjero", desc: "Cobra 30 veces con el precio alto (×1.35+)" },
 ];
 
 // ---------------------------------------------------------------------------
