@@ -65,7 +65,7 @@ describe("pedidos de la lonja", () => {
     expect(s.money).toBeGreaterThanOrEqual(before + goal * 0 + reward);
   });
 
-  it("tiempo agotado sin llegar → se va sin pagar y sin castigo", () => {
+  it("pedido ACEPTADO y fallado → order_failed y cooldown largo (v1.8)", () => {
     const { s } = warmupToOrder();
     acceptOrder(s);
     const money = s.money;
@@ -73,8 +73,22 @@ describe("pedidos de la lonja", () => {
     // Deja pasar el tiempo sin cobrar nada (los barcos quedan ready sin cobrar).
     tick(s, C.ORDER_TIME_S + 1, events);
     expect(s.order).toBeNull();
+    expect(events.some((e) => e.kind === "order_failed")).toBe(true);
+    expect(events.some((e) => e.kind === "order_gone")).toBe(false);
+    expect(s.money).toBe(money); // sin multa económica: la multa es la espera
+    // El siguiente cliente tarda MÁS que el rango normal de re-oferta.
+    expect(s.orderT).toBeGreaterThanOrEqual(C.ORDER_FAIL_COOLDOWN_S - (C.ORDER_TIME_S + 1));
+    expect(C.ORDER_FAIL_COOLDOWN_S).toBeGreaterThan(C.ORDER_INTERVAL_MAX_S);
+  });
+
+  it("oferta NO aceptada que caduca → order_gone, sin castigo extra", () => {
+    const { s } = warmupToOrder();
+    expect(s.order?.stage).toBe("offer");
+    const events: SimEvent[] = [];
+    tick(s, C.ORDER_OFFER_S + 1, events);
+    expect(s.order).toBeNull();
     expect(events.some((e) => e.kind === "order_gone")).toBe(true);
-    expect(s.money).toBe(money);
+    expect(s.orderT).toBeLessThanOrEqual(C.ORDER_INTERVAL_MAX_S);
   });
 
   it("el prestigio limpia el pedido pero NO la pescadoteca", () => {

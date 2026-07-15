@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -56,8 +56,14 @@ export const MAX_BOATS = 14;
 // Mejoras por barco -----------------------------------------------------------
 /** Coste mejora velocidad = tier.baseCost * SPEED_COST_FACTOR * COST_GROWTH^lvl */
 export const SPEED_COST_FACTOR = 0.35;
-/** Reducción de ciclo: cycle / (1 + SPEED_BONUS * lvl) */
-export const SPEED_BONUS = 0.08;
+/**
+ * Reducción de ciclo: cycle / (1 + SPEED_BONUS * lvl).
+ * v1.8: 0.08 → 0.13. Con 0.08, capacidad daba ×1.94 más ingreso por moneda que
+ * velocidad en TODOS los niveles (dominada estricta). Ahora queda ~×1.2: capacidad
+ * sigue mandando en $/s puro, pero velocidad da más ciclos = más tiradas de
+ * especie/dorada/racha, y esa es su gracia.
+ */
+export const SPEED_BONUS = 0.13;
 export const SPEED_MAX_LVL = 25;
 
 /** Coste mejora capacidad = tier.baseCost * CAP_COST_FACTOR * COST_GROWTH^lvl */
@@ -200,13 +206,17 @@ export interface WeatherDef {
   cargoMult: number;
   speedMult: number;
   speciesMult: number;
+  /** Multiplicador del intervalo entre cofres a la deriva (<1 = más frecuentes). */
+  driftMult: number;
 }
 
 export const WEATHERS: WeatherDef[] = [
-  { id: "despejado", name: "Despejado", desc: "Un día de postal", weight: 40, cargoMult: 1, speedMult: 1, speciesMult: 1 },
-  { id: "niebla", name: "Niebla", desc: "Se navega despacio… y lo raro se acerca a mirar", weight: 20, cargoMult: 1, speedMult: 0.85, speciesMult: 1.5 },
-  { id: "llovizna", name: "Llovizna", desc: "Con lluvia fina, los peces pican", weight: 20, cargoMult: 1.1, speedMult: 1, speciesMult: 1 },
-  { id: "marejada", name: "Marejada", desc: "Mar gruesa: redes llenas, ritmo lento", weight: 20, cargoMult: 1.25, speedMult: 0.85, speciesMult: 1 },
+  { id: "despejado", name: "Despejado", desc: "Un día de postal", weight: 40, cargoMult: 1, speedMult: 1, speciesMult: 1, driftMult: 1 },
+  // v1.8: la niebla era un día a −15% sin contrapartida una vez completada la zona;
+  // ahora también arrima cofres a la deriva (intervalo ×0.6).
+  { id: "niebla", name: "Niebla", desc: "Se navega despacio… y el mar arrima cosas raras y cofres", weight: 20, cargoMult: 1, speedMult: 0.85, speciesMult: 1.5, driftMult: 0.6 },
+  { id: "llovizna", name: "Llovizna", desc: "Con lluvia fina, los peces pican", weight: 20, cargoMult: 1.1, speedMult: 1, speciesMult: 1, driftMult: 1 },
+  { id: "marejada", name: "Marejada", desc: "Mar gruesa: redes llenas, ritmo lento", weight: 20, cargoMult: 1.25, speedMult: 0.85, speciesMult: 1, driftMult: 1 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -238,6 +248,8 @@ export const DAILY_REWARD_MIN = 2_000;
 // Pintura de barcos (personalización pura; 0 = color de fábrica del tier)
 // ---------------------------------------------------------------------------
 export const PAINTS = ["", "#c94f4f", "#4f7fc9", "#4fa06a", "#8a5aa6", "#e0a33e", "#3b3f4a"];
+/** Nombre de cada color (mismo índice que PAINTS) para el toast al pintar. */
+export const PAINT_NAMES = ["color de fábrica", "rojo teja", "azul ultramar", "verde mar", "violeta", "ámbar", "carbón"];
 
 // ---------------------------------------------------------------------------
 // Mercado de la lonja (precio vivo) — el timing de venta importa
@@ -283,10 +295,13 @@ export interface ExpeditionDef {
   relicChance: number;
 }
 
+// v1.8: factores 1.9/2.6 → 1.6/1.8. Con 2.6, la Odisea superaba el techo teórico
+// del jugador activo perfecto (racha máx × EV dorada ≈ ×1.65) sin riesgo ni
+// atención: dominaba TODO. Sigue siendo la mejor jugada idle, ya no la única jugada.
 export const EXPEDITIONS: ExpeditionDef[] = [
   { id: "marea", name: "Con la marea", dur: 5 * 60, factor: 1.4, relicChance: 0.08 },
-  { id: "travesia", name: "Travesía", dur: 20 * 60, factor: 1.9, relicChance: 0.3 },
-  { id: "odisea", name: "Odisea", dur: 60 * 60, factor: 2.6, relicChance: 1 },
+  { id: "travesia", name: "Travesía", dur: 20 * 60, factor: 1.6, relicChance: 0.3 },
+  { id: "odisea", name: "Odisea", dur: 60 * 60, factor: 1.8, relicChance: 1 },
 ];
 /** Barcos mínimos para poder zarpar (el puerto no se queda vacío). */
 export const EXPEDITION_MIN_BOATS = 2;
@@ -359,14 +374,22 @@ export const KRAKEN_REWARD_SECONDS = 300;
 export const KRAKEN_RELIC_CHANCE = 0.3;
 /** Si escapa: fracción de carga que arranca a los barcos cargados. */
 export const KRAKEN_CARGO_LOSS = 0.35;
+/** Soltar carga para aplacarlo (v1.8): pierdes esta fracción YA, pero se va sin botín. */
+export const KRAKEN_APPEASE_LOSS = 0.15;
 
 /** Tormenta: ventana de decisión (s) y duración del efecto (s). */
 export const STORM_WARNING_S = 10;
 export const STORM_DURATION_S = 25;
 /** Riesgo: multiplicador de ingresos si no te refugias… */
 export const STORM_RISK_MULT = 1.5;
-/** …pero cada barco que vuelve durante la tormenta pierde media carga con esta prob. */
-export const STORM_LOSS_CHANCE = 0.25;
+/**
+ * …pero cada barco que vuelve durante la tormenta puede perder la carga ENTERA.
+ * v1.8: antes era media carga al 25% (EV de arriesgar 1.31 vs 1.0 de refugio:
+ * refugiarse nunca era racional). Con carga entera al 35%, el barco que llega
+ * en plena tormenta es una apuesta de verdad (EV ~0.98 por barco que arriba)
+ * y el ×1.5 se gana con los que faenan sin cruzar el temporal.
+ */
+export const STORM_LOSS_CHANCE = 0.35;
 /** Nº mínimo de barcos para que salga tormenta (que la decisión importe). */
 export const STORM_MIN_BOATS = 2;
 
@@ -395,6 +418,11 @@ export const ORDER_TIME_S = 90;
 export const ORDER_OFFER_S = 25;
 /** Bono al completar = objetivo × factor. */
 export const ORDER_REWARD_FACTOR = 0.6;
+/**
+ * v1.8: fallar un pedido ACEPTADO retrasa al siguiente cliente más que rechazarlo
+ * de entrada (antes ambos costaban lo mismo → aceptar siempre era gratis).
+ */
+export const ORDER_FAIL_COOLDOWN_S = 420;
 
 // ---------------------------------------------------------------------------
 // Pescadoteca (colección de especies, persiste entre prestigios)
@@ -483,15 +511,15 @@ export interface TraitDef {
 }
 
 export const TRAITS: TraitDef[] = [
-  { id: "rapido", name: "Manos rápidas", desc: "Su barco navega un 25% más rápido" },
+  { id: "rapido", name: "Manos rápidas", desc: "Su barco navega un 28% más rápido" },
   { id: "redes", name: "Redes dobles", desc: "Su barco trae un 30% más de carga" },
   { id: "lobo", name: "Lobo de mar", desc: "Su barco nunca pierde carga en tormenta" },
   { id: "ojo", name: "Ojo avizor", desc: "Triple probabilidad de descubrir especies" },
   { id: "pregonero", name: "Pregonero", desc: "Su pesca cuenta un 60% más en pedidos" },
 ];
 
-/** Efectos de rasgo (los usa economy/sim). */
-export const TRAIT_SPEED_BONUS = 0.25;
+/** Efectos de rasgo (los usa economy/sim). v1.8: rápido 0.25→0.28 (acercar a redes). */
+export const TRAIT_SPEED_BONUS = 0.28;
 export const TRAIT_CARGO_BONUS = 0.3;
 export const TRAIT_SPECIES_MULT = 3;
 export const TRAIT_ORDER_MULT = 1.6;
@@ -527,7 +555,7 @@ export interface LegacyDef {
 
 export const LEGACY_BRANCHES: LegacyDef[] = [
   { id: "astillero", name: "Astillero familiar", desc: "+10% de carga en toda la flota" },
-  { id: "escuela", name: "Escuela de navegación", desc: "+8% de velocidad en toda la flota" },
+  { id: "escuela", name: "Escuela de navegación", desc: "+9% de velocidad en toda la flota" },
   { id: "faro", name: "El Faro Viejo", desc: "+2h de cofre offline y +35% de encontrar especies" },
 ];
 
@@ -536,7 +564,8 @@ export const LEGACY_COSTS = [1, 2, 4, 7, 12];
 export const LEGACY_MAX_LVL = LEGACY_COSTS.length;
 
 export const LEGACY_ASTILLERO_CARGO = 0.1;
-export const LEGACY_ESCUELA_SPEED = 0.08;
+/** v1.8: 0.08 → 0.09 (mismo coste de rep que astillero; la velocidad además da más tiradas). */
+export const LEGACY_ESCUELA_SPEED = 0.09;
 export const LEGACY_FARO_OFFLINE_S = 2 * 3600;
 export const LEGACY_FARO_SPECIES = 0.35;
 

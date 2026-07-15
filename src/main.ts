@@ -14,6 +14,7 @@ import { applyOffline } from "./sim/offline";
 import { loadFromStorage, saveToStorage, clearStorage } from "./sim/save";
 import {
   acceptOrder,
+  appeaseKraken,
   buyBoat,
   buyLegacy,
   buyVigia,
@@ -26,6 +27,7 @@ import {
   hireManager,
   hireSkipper,
   paintBoat,
+  toggleManagerPause,
   renamePort,
   resolveStorm,
   startExpedition,
@@ -73,6 +75,13 @@ function persist(): void {
 // --------------------------------------------------------------------------- acciones
 const RARITY_TEXT = { comun: "", rara: " (¡rara!)", epica: " (¡¡ÉPICA!!)", leyenda: " (¡¡¡LEYENDA!!!)" } as const;
 
+/** Consejo one-shot: se muestra una vez por partida-legado y queda en el save. */
+function tipOnce(id: string, text: string): void {
+  if (state.tips.includes(id)) return;
+  state.tips.push(id);
+  ui.toast(text);
+}
+
 function handleEvents(events: SimEvent[]): void {
   if (events.length === 0) return;
   renderer.onSimEvents(events, state);
@@ -92,6 +101,14 @@ function handleEvents(events: SimEvent[]): void {
         break;
       case "kraken_escaped":
         ui.toast(`El Kraken se sumerge con ${formatMoney(ev.lost)} de tu carga…`);
+        audio.play("error");
+        break;
+      case "kraken_appeased":
+        ui.toast(ev.lost > 0 ? `Sueltas ${formatMoney(ev.lost)} por la borda y el Kraken se hunde, saciado.` : "El Kraken husmea las bodegas vacías y se hunde, aburrido.");
+        audio.play("ui");
+        break;
+      case "order_failed":
+        ui.toast("El pedido se queda sin entregar. Ese cliente tardará en volver…");
         audio.play("error");
         break;
       case "weather_change": {
@@ -223,7 +240,9 @@ const actions = {
   },
   paintBoat(boatId: number) {
     if (paintBoat(state, boatId).ok) {
-      audio.play("ui");
+      audio.play("upgrade");
+      const boat = state.boats.find((b) => b.id === boatId);
+      if (boat) ui.toast(`Casco pintado: ${C.PAINT_NAMES[boat.paint]}.`);
       persist();
       ui.renderTab();
     }
@@ -242,20 +261,33 @@ const actions = {
     const events: SimEvent[] = [];
     if (hireManager(state, events).ok) {
       audio.play("upgrade");
-      ui.toast("El gestor cobra las cargas por ti.");
+      ui.toast("El gestor cobra por ti — pero solo cobrando tú hay rachas y doradas.");
       persist();
     } else audio.play("error");
     handleEvents(events);
     ui.renderTab();
   },
-  hireSkipper(index: number) {
+  hireSkipper(index: number, boatId?: number) {
     const events: SimEvent[] = [];
-    if (hireSkipper(state, index, events).ok) {
+    if (hireSkipper(state, index, events, boatId).ok) {
       audio.play("buy");
       persist();
     } else audio.play("error");
     handleEvents(events);
     ui.renderTab();
+  },
+  toggleManagerPause() {
+    if (toggleManagerPause(state).ok) {
+      audio.play("ui");
+      ui.toast(state.managerPaused ? "El gestor descansa: los cobros son tuyos (rachas y doradas)." : "El gestor vuelve al tajo.");
+      persist();
+      ui.renderTab();
+    }
+  },
+  appeaseKraken() {
+    const events: SimEvent[] = [];
+    if (appeaseKraken(state, events).ok) persist();
+    handleEvents(events);
   },
   buyLegacy(branch: C.LegacyBranch) {
     const events: SimEvent[] = [];
@@ -372,9 +404,13 @@ async function buildShareCard(): Promise<void> {
   g.strokeRect(12, 12, W - 24, H - 24);
 
   // El mejor barco de la flota, en grande y pixelado.
-  const bestTier = state.boats.length ? Math.max(...state.boats.map((b) => b.tier)) : 0;
+  // El mejor barco CON su pintura: si el jugador lo pintó, la tarjeta lo enseña.
+  const bestBoat = state.boats.length
+    ? state.boats.reduce((a, b) => (b.tier > a.tier ? b : a))
+    : null;
+  const bestTier = bestBoat?.tier ?? 0;
   const img = new Image();
-  img.src = boatThumbURL(bestTier);
+  img.src = boatThumbURL(bestTier, bestBoat && bestBoat.paint > 0 ? C.PAINTS[bestBoat.paint] : "");
   await img.decode();
   g.imageSmoothingEnabled = false;
   const scale = Math.min(8, Math.floor((W * 0.6) / img.width));
@@ -453,6 +489,7 @@ function canvasTap(x: number, y: number): void {
       // Racha viva: el segundo texto vende el juego activo.
       if (state.combo.n >= 2) {
         renderer.particles.float(hit.x, hit.y - 52, `racha ×${(1 + (state.combo.n - 1) * C.COMBO_STEP).toFixed(2)}`, "#dfa93e");
+        tipOnce("combo", "Racha: encadena cobros (menos de 4s entre uno y otro) y cada uno paga más. Si paras, se corta.");
       }
     }
   } else if (hit.type === "shoal") {
@@ -493,15 +530,23 @@ window.addEventListener("pointerdown", () => audio.unlock(), { capture: true });
 window.addEventListener("resize", () => renderer.resize());
 
 // --------------------------------------------------------------------------- offline
-function checkOffline(showModal: boolean): void {
+/**
+ * Secuencia de apertura: cofre offline → (al recogerlo) regalo diario.
+ * ENCADENADOS: ambos modales escriben en #modal-slot y en paralelo el segundo
+ * pisaba al primero — el momento más gordo del juego (volver tras horas) no se veía.
+ */
+function openingSequence(): void {
   const r = applyOffline(state, Date.now());
-  if (r.earned > 0 && r.seconds >= C.OFFLINE_MIN_S && showModal) {
+  if (r.earned > 0 && r.seconds >= C.OFFLINE_MIN_S) {
     // El dinero ya está aplicado; el modal es la celebración.
     ui.showOfflineModal(r, () => {
       audio.play("chest");
       const t = ui.coinTarget();
       renderer.particles.coins(window.innerWidth / 2, window.innerHeight / 2, t.x, t.y, 12);
+      checkGift();
     });
+  } else {
+    checkGift();
   }
   persist();
 }
@@ -512,16 +557,14 @@ document.addEventListener("visibilitychange", () => {
     audio.suspend();
   } else {
     audio.resume();
-    checkOffline(true);
-    checkGift();
+    openingSequence();
     if (checkDaily(state, Date.now())) persist();
   }
 });
 window.addEventListener("pagehide", persist);
 
 // Al arrancar: cofre si venías de una ausencia, paquete del pescador y desafío del día.
-checkOffline(true);
-checkGift();
+openingSequence();
 if (checkDaily(state, Date.now())) {
   const def = C.DAILIES[state.daily!.def];
   ui.toast(`☀ Desafío del día: ${def.text}. Todo el mundo pesca lo mismo hoy.`);
@@ -542,7 +585,7 @@ function frame(now: number): void {
 
   // Hueco enorme sin visibilitychange (suspensión del sistema): ruta offline.
   if (dt > 30) {
-    checkOffline(true);
+    openingSequence();
     dt = 0.016;
   }
   dt = Math.min(dt, 2) * timeScale;
@@ -575,6 +618,10 @@ function frame(now: number): void {
   if (uiT >= 0.25) {
     uiT = 0;
     ui.refreshDynamic();
+    // Primera vez que la lonja paga caro: contar que el timing de venta existe.
+    if (state.market.mult >= C.MARKET_HIGH) {
+      tipOnce("market", `La lonja paga ×${state.market.mult.toFixed(2)}: cobra AHORA y vale más. El precio sube y baja solo.`);
+    }
   }
   saveT += dt;
   if (saveT >= C.AUTOSAVE_INTERVAL_S) {
@@ -594,7 +641,9 @@ window.setInterval(() => {
   last = now;
   if (!Number.isFinite(dt) || dt <= 0) return;
   if (dt > 30) {
-    checkOffline(false);
+    // Pestaña oculta: aplicar el cofre sin modales (se celebran al volver).
+    applyOffline(state, Date.now());
+    persist();
     return;
   }
   const events: SimEvent[] = [];

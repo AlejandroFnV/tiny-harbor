@@ -794,10 +794,11 @@ export function skipperPortraitURL(name: string): string {
   return url;
 }
 
-/** Miniatura de barco para la UI (dataURL, escala fija, día). */
-const thumbCache = new Map<number, string>();
-export function boatThumbURL(tier: number): string {
-  const hit = thumbCache.get(tier);
+/** Miniatura de barco para la UI (dataURL, escala fija, día). `paint` tiñe el casco. */
+const thumbCache = new Map<string, string>();
+export function boatThumbURL(tier: number, paint = ""): string {
+  const key = `${tier}:${paint}`;
+  const hit = thumbCache.get(key);
   if (hit) return hit;
   const spr = BOATS[Math.min(tier, BOATS.length - 1)];
   const s = 3;
@@ -806,8 +807,8 @@ export function boatThumbURL(tier: number): string {
   cv.height = spr.h * s;
   const ctx = cv.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(raster(spr, 0, { hullTier: tier }), 0, 0, cv.width, cv.height);
+  ctx.drawImage(raster(spr, 0, { hullTier: tier, paint: paint || undefined }), 0, 0, cv.width, cv.height);
   const url = cv.toDataURL();
-  thumbCache.set(tier, url);
+  thumbCache.set(key, url);
   return url;
 }

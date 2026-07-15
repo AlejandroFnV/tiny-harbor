@@ -4,6 +4,7 @@
  * El paso avanza cuando el jugador HACE la acción (no al pulsar "siguiente").
  */
 
+import * as C from "../sim/config";
 import type { GameState } from "../sim/types";
 import type { Renderer } from "../render/renderer";
 import type { UI } from "./ui";
@@ -90,6 +91,36 @@ export class Tutorial {
       text: "Las misiones pagan extra y se renuevan solas.",
       target: () => this.elCenter("#missions-btn"),
       done: () => this.ui.missionsOpened,
+    },
+    // v1.8: el tutorial se quedó en v1.0 y 6 versiones de mecánicas quedaron sin
+    // presentar. Pasos condicionales: la mano no aparece hasta que la mecánica existe.
+    {
+      text: "En el PUERTO hay taberna: los patrones dan talento a tus barcos.",
+      target: () => {
+        const s = this.getState();
+        // Hasta que la taberna abre (2+ barcos), este paso duerme sin mano.
+        if (s.boats.length < C.TAVERN_MIN_BOATS) return null;
+        return this.elCenter("#tabbar [data-tab='puerto']");
+      },
+      done: (s) => this.ui.puertoVisited || s.stats.skippersHired > 0,
+    },
+    {
+      text: "El MAPA también manda expediciones: botín gordo mientras no miras.",
+      target: () => {
+        const s = this.getState();
+        if (s.boats.length < C.EXPEDITION_MIN_BOATS) return null;
+        return this.elCenter("#tabbar [data-tab='mapa']");
+      },
+      done: (s) => s.stats.expeditionsDone > 0 || s.expedition !== null,
+    },
+    {
+      text: "Tienes reputación: gástala en el LEGADO, no se pierde nunca.",
+      target: () => {
+        const s = this.getState();
+        if (s.repEarned === 0) return null;
+        return this.elCenter("#tabbar [data-tab='prestigio']");
+      },
+      done: (s) => this.ui.legadoVisited || s.legacy.astillero + s.legacy.escuela + s.legacy.faro > 0,
     },
   ];
 

@@ -34,6 +34,7 @@ export function newGame(now: number, seed = 1234567): GameState {
     lonjaLvl: 0,
     managerLvl: 0,
     managerT: 0,
+    managerPaused: false,
     zonesUnlocked: 0,
     missions: [],
     nextMissionId: 1,
@@ -56,10 +57,13 @@ export function newGame(now: number, seed = 1234567): GameState {
     vigia: false,
     weather: 0,
     daily: null,
-    gift: { lastAt: 0, streak: 0 },
+    // lastAt = now: en partida NUEVA el regalo no salta en el primer frame
+    // pisando el paso 1 del tutorial; el primer paquete llega a las 20h.
+    gift: { lastAt: now, streak: 0 },
     lastSeen: now,
     playTime: 0,
     tutorialStep: 0,
+    tips: [],
     settings: { muted: false, music: true },
     stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
     rngSeed: seed >>> 0,
@@ -93,6 +97,7 @@ export function sanitize(state: GameState): GameState {
   state.lonjaLvl = Math.floor(num(state.lonjaLvl, 0, 0, 1000));
   state.managerLvl = Math.floor(num(state.managerLvl, 0, 0, C.MANAGER_MAX_LVL));
   state.managerT = num(state.managerT, 0, 0, 60);
+  state.managerPaused = state.managerPaused === true;
   state.zonesUnlocked = Math.floor(num(state.zonesUnlocked, 0, 0, C.ZONES.length - 1));
   state.playTime = num(state.playTime, 0);
   state.lastSeen = num(state.lastSeen, 0);
@@ -198,6 +203,10 @@ export function sanitize(state: GameState): GameState {
   if (!state.gift || typeof state.gift !== "object") state.gift = { lastAt: 0, streak: 0 };
   state.gift.lastAt = num(state.gift.lastAt, 0);
   state.gift.streak = Math.floor(num(state.gift.streak, 0, 0, 100000));
+
+  // Consejos one-shot ya vistos.
+  if (!Array.isArray(state.tips)) state.tips = [];
+  state.tips = [...new Set(state.tips)].filter((t) => typeof t === "string").slice(0, 64);
 
   // Taberna.
   if (!state.tavern || typeof state.tavern !== "object" || !Array.isArray(state.tavern.candidates)) {

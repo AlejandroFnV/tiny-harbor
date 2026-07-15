@@ -172,7 +172,10 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .btn.primary:not(:disabled) {
+  .btn.primary:not(:disabled),
+  .combo-stamp,
+  .market-chip.hot,
+  .event-banner.kraken {
     animation: none;
   }
 }
@@ -305,6 +308,14 @@ body {
 /* Barco fuera de expedición: fila atenuada. */
 .boat-row.away { opacity: 0.6; }
 
+/* Columna de botones en una card (gestor: contratar + pausa). */
+.btn-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
 .expedition-card .bar {
   margin-top: 6px;
   height: 6px;
@@ -320,14 +331,18 @@ body {
   border-radius: 3px;
 }
 
-/* Chip del clima. */
+/* Chip del clima (v1.8: de 10px casi invisible a chip legible con fondo). */
 .weather-chip {
-  margin-top: 1px;
-  font-size: 10px;
+  margin-top: 3px;
+  font-size: 11.5px;
   font-weight: 800;
-  color: #5a748c;
+  color: #465e73;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+  background: rgba(90, 116, 140, 0.14);
+  border-radius: 5px;
+  padding: 1px 6px;
+  display: inline-block;
 }
 
 /* Botón de pintura del casco. */
@@ -353,12 +368,12 @@ body {
   opacity: 0.75;
 }
 
-/* Chip del vigía (bajo el ticker de la lonja). */
+/* Chip del vigía (bajo el ticker de la lonja). v1.8: legible, no 10px. */
 .vigia-chip {
-  margin-top: 1px;
-  font-size: 10px;
+  margin-top: 3px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: var(--ink-soft);
+  color: var(--ink);
   letter-spacing: 0.02em;
   line-height: 1.2;
 }
@@ -866,9 +881,10 @@ body {
 }
 
 .ach {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 6px;
+  column-gap: 6px;
   padding: 6px 8px;
   font-size: 11.5px;
   font-weight: 700;
@@ -877,6 +893,16 @@ body {
   border: 1.5px solid var(--ink);
   border-radius: 8px;
   opacity: 0.6;
+}
+
+/* Descripción visible del logro/reliquia (title no existe en táctil). */
+.ach em {
+  grid-column: 2;
+  font-style: normal;
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  opacity: 0.85;
 }
 
 .ach.got {
@@ -1176,7 +1202,8 @@ body {
 /* ---------- toasts ---------- */
 .toasts {
   position: absolute;
-  bottom: 84px;
+  /* Por encima del botón "Cobrar todo" (bottom 84): compartían banda y el toast lo tapaba. */
+  bottom: 148px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;

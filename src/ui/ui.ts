@@ -49,7 +49,9 @@ export interface UIActions {
   renamePort(name: string): void;
   shareCard(): void;
   hireManager(): void;
-  hireSkipper(index: number): void;
+  hireSkipper(index: number, boatId?: number): void;
+  toggleManagerPause(): void;
+  appeaseKraken(): void;
   buyLegacy(branch: C.LegacyBranch): void;
   unlockZone(): void;
   buyVigia(): void;
@@ -96,6 +98,8 @@ export class UI {
   activeTab: TabName = "flota";
   sheetOpen = false;
   mapVisited = false;
+  puertoVisited = false;
+  legadoVisited = false;
   missionsOpened = false;
   missionsPanelOpen = false;
   private lastMoneyText = "";
@@ -210,6 +214,8 @@ export class UI {
         } else {
           this.activeTab = tab;
           if (tab === "mapa") this.mapVisited = true;
+          if (tab === "puerto") this.puertoVisited = true;
+          if (tab === "prestigio") this.legadoVisited = true;
           this.setSheetOpen(true);
           this.renderTab();
         }
@@ -234,7 +240,15 @@ export class UI {
       case "rename-port": this.showRenameModal(); break;
       case "share-card": this.act.shareCard(); break;
       case "hire-manager": this.act.hireManager(); break;
-      case "hire-skipper": this.act.hireSkipper(Number(el.dataset.index)); break;
+      case "toggle-manager-pause": this.act.toggleManagerPause(); break;
+      case "kraken-appease": this.act.appeaseKraken(); break;
+      case "hire-skipper": this.hireSkipperFlow(Number(el.dataset.index)); break;
+      case "trait-info": {
+        // Móvil no tiene hover: el rasgo del patrón se explica al toque.
+        const tr = traitDef(el.dataset.trait ?? "");
+        if (tr) this.toast(`${tr.name}: ${tr.desc}.`);
+        break;
+      }
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
       case "unlock-zone": this.act.unlockZone(); break;
       case "buy-vigia": this.act.buyVigia(); break;
@@ -337,7 +351,7 @@ export class UI {
       const t = C.BOAT_TIERS[b.tier];
       const tr = b.skipper ? traitDef(b.skipper.trait) : null;
       const chip = b.skipper
-        ? `<span class="skipper-chip" title="${tr?.desc ?? ""}"><img src="${skipperPortraitURL(b.skipper.name)}" alt="">${b.skipper.name} · ${tr?.name ?? ""}</span>`
+        ? `<span class="skipper-chip" data-action="trait-info" data-trait="${b.skipper.trait}" title="${tr?.desc ?? ""}"><img src="${skipperPortraitURL(b.skipper.name)}" alt="">${b.skipper.name} · ${tr?.name ?? ""}</span>`
         : "";
       const away = isAway(s, b.id);
       html += `<div class="boat-row ${away ? "away" : ""}" data-boat="${b.id}">
@@ -371,13 +385,17 @@ export class UI {
     const mDesc =
       mLvl === 0
         ? "Cobra las cargas por ti. El puerto trabaja solo."
-        : mLvl >= C.MANAGER_MAX_LVL
+        : (mLvl >= C.MANAGER_MAX_LVL
           ? `Cobra cada ${C.MANAGER_INTERVALS[mLvl - 1]}s. Nivel máximo.`
-          : `Cobra cada ${C.MANAGER_INTERVALS[mLvl - 1]}s → cada ${C.MANAGER_INTERVALS[mLvl]}s.`;
+          : `Cobra cada ${C.MANAGER_INTERVALS[mLvl - 1]}s → cada ${C.MANAGER_INTERVALS[mLvl]}s.`) +
+          " Ojo: solo cobrando TÚ hay rachas, doradas y precio alto.";
     html += `<div class="card">
-      <div class="info"><div class="name">Gestor del puerto${mLvl > 0 ? ` <small>nv.${mLvl}</small>` : ""}</div>
+      <div class="info"><div class="name">Gestor del puerto${mLvl > 0 ? ` <small>${s.managerPaused ? "descansando" : `nv.${mLvl}`}</small>` : ""}</div>
       <div class="desc">${mDesc}</div></div>
+      <div class="btn-col">
       ${mLvl >= C.MANAGER_MAX_LVL ? "" : `<button class="btn primary" data-action="hire-manager">${mLvl === 0 ? "Contratar" : "Subir"}<span class="sub" data-cost-label></span></button>`}
+      ${mLvl > 0 ? `<button class="btn" data-action="toggle-manager-pause">${s.managerPaused ? "Despertar" : "Dar descanso"}</button>` : ""}
+      </div>
     </div>`;
 
     // La Torre del Vigía: anticipación comprable (se pierde al vender).
@@ -556,8 +574,9 @@ export class UI {
       html += `<div class="ach-grid relic-grid">`;
       for (const r of C.RELICS) {
         const got = s.relics.includes(r.id);
+        // Descripción visible (title no existe en móvil): la reliquia ganada enseña su bonus.
         html += `<div class="ach ${got ? "got" : ""}" title="${r.desc}">
-          <b>${got ? "◆" : "◇"}</b><span>${got ? r.name : "???"}</span>
+          <b>${got ? "◆" : "◇"}</b><span>${got ? r.name : "???"}</span>${got ? `<em>${r.desc}</em>` : ""}
         </div>`;
       }
       html += `</div>`;
@@ -569,8 +588,9 @@ export class UI {
     <div class="ach-grid">`;
     for (const a of C.ACHIEVEMENTS) {
       const got = s.achievements.includes(a.id);
+      // La condición siempre visible: un logro que no dice cómo se gana no es una meta.
       html += `<div class="ach ${got ? "got" : ""}" title="${a.desc}">
-        <b>${got ? "★" : "☆"}</b><span>${a.name}</span>
+        <b>${got ? "★" : "☆"}</b><span>${a.name}</span><em>${a.desc}</em>
       </div>`;
     }
     html += `</div>`;
@@ -608,9 +628,25 @@ export class UI {
   }
 
   // ------------------------------------------------------------- dynamic bits
+  private lastBannersTop = 0;
   /** Actualiza costes/estados sin reconstruir el DOM (llamar ~4×/s). */
   refreshDynamic(): void {
     const s = this.getState();
+
+    // Misiones y banners cuelgan del borde REAL de la money-card: con vigía+clima
+    // la card crece y los top fijos en CSS acababan pisándola (bug HUD v1.7).
+    const cardRect = document.getElementById("money-card")!.getBoundingClientRect();
+    if (cardRect.height > 0) {
+      const missionsTop = Math.round(cardRect.bottom + 8);
+      if (missionsTop !== this.lastBannersTop) {
+        this.lastBannersTop = missionsTop;
+        const mBtn = document.getElementById("missions-btn")!;
+        mBtn.style.top = `${missionsTop}px`;
+        const mRect = mBtn.getBoundingClientRect();
+        (document.querySelector(".banners") as HTMLElement).style.top = `${Math.round(mRect.bottom + 8)}px`;
+        (document.getElementById("missions-panel") as HTMLElement).style.top = `${Math.round(mRect.bottom + 6)}px`;
+      }
+    }
 
     document.querySelectorAll<HTMLButtonElement>("[data-action='buy-boat']").forEach((btn) => {
       const tier = Number(btn.dataset.tier);
@@ -772,7 +808,7 @@ export class UI {
     if (vChip.hidden === s.vigia) vChip.hidden = !s.vigia;
     if (s.vigia) {
       const evTxt = s.event ? "¡evento AHORA!" : `evento ~${Math.ceil(s.eventT)}s`;
-      const driftTxt = s.drift ? "¡cofre al agua!" : s.playTime < 300 ? "" : ` · cofre ~${Math.ceil(s.driftT)}s`;
+      const driftTxt = s.drift ? " · ¡cofre al agua!" : s.playTime < 300 ? "" : ` · cofre ~${Math.ceil(s.driftT)}s`;
       const txt = `vigía: ${evTxt}${driftTxt}`;
       if (vChip.textContent !== txt) vChip.textContent = txt;
     }
@@ -800,7 +836,7 @@ export class UI {
     this.renderMissions(false);
 
     // ¿La estructura cambió por debajo? (compra desde otra vía, prestigio…)
-    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.lonjaLvl}:${s.managerLvl}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}:${s.expedition?.boatId ?? "-"}:${s.relics.length}`;
+    const sig = `${s.boats.length}:${s.boats.map((b) => `${b.id}.${b.speedLvl}.${b.capLvl}.${b.skipper?.name ?? ""}`).join(",")}:${s.zonesUnlocked}:${s.dockLevel}:${s.lonjaLvl}:${s.managerLvl}${s.managerPaused ? "p" : ""}:${s.prestiges}:${s.tavern.candidates.map((c) => c.name).join(",")}:${s.reputation}:${s.legacy.astillero}${s.legacy.escuela}${s.legacy.faro}:${s.achievements.length}:${s.expedition?.boatId ?? "-"}:${s.relics.length}`;
     if (sig !== this.lastStructure) {
       this.lastStructure = sig;
       if (this.sheetOpen) this.renderTab();
@@ -811,7 +847,9 @@ export class UI {
   private renderMissions(force: boolean): void {
     const s = this.getState();
     const live = s.missions.filter((m) => !m.done);
-    document.getElementById("missions-badge")!.textContent = String(live.length);
+    // El badge también cuenta el desafío del día pendiente (promesa visual honesta).
+    const pending = live.length + (s.daily && !s.daily.done ? 1 : 0);
+    document.getElementById("missions-badge")!.textContent = String(pending);
     const panel = document.getElementById("missions-panel")!;
     if (panel.hidden === this.missionsPanelOpen) panel.hidden = !this.missionsPanelOpen;
     if (!this.missionsPanelOpen) return;
@@ -859,12 +897,15 @@ export class UI {
         slot.innerHTML = `<div class="event-banner storm kraken">
           <h3>¡EL KRAKEN!</h3>
           <p>¡Tócalo <b>${ev.tapsLeft}</b> veces más o se llevará la carga!</p>
+          <div class="row">
+            <button class="btn" data-action="kraken-appease">Soltar carga (−${C.KRAKEN_APPEASE_LOSS * 100}%) y que se vaya</button>
+          </div>
           <div class="timer"><i></i></div>
         </div>`;
       } else if (ev.kind === "storm" && ev.stage === "warning") {
         slot.innerHTML = `<div class="event-banner storm">
           <h3>Tormenta a la vista</h3>
-          <p>¿Refugias la flota (segura, en pausa) o sigues faenando (×${C.STORM_RISK_MULT} pero puedes perder carga)?</p>
+          <p>¿Refugias la flota (segura, en pausa) o sigues faenando (×${C.STORM_RISK_MULT}, pero el barco que llegue en plena tormenta puede perder TODA su carga)?</p>
           <div class="row">
             <button class="btn" data-action="storm-shelter">Refugiar</button>
             <button class="btn primary" data-action="storm-risk">Arriesgar</button>
@@ -992,6 +1033,44 @@ export class UI {
     });
   }
 
+  /**
+   * Fichar (v1.8): con 2+ barcos libres el jugador elige a cuál va el patrón —
+   * el emparejamiento rasgo × barco es la gracia. Con uno solo, directo.
+   */
+  private hireSkipperFlow(index: number): void {
+    const s = this.getState();
+    const cand = s.tavern.candidates[index];
+    if (!cand) return;
+    const free = s.boats.filter((b) => !b.skipper && !isAway(s, b.id));
+    if (free.length <= 1) {
+      this.act.hireSkipper(index);
+      return;
+    }
+    const tr = traitDef(cand.trait);
+    const slot = document.getElementById("modal-slot")!;
+    const rows = free
+      .map((b) => {
+        const t = C.BOAT_TIERS[b.tier];
+        return `<button class="buyer-card" data-assign="${b.id}">
+          <span class="bname">${t.name} <small>nº${b.id}</small></span>
+          <span class="bdesc">trae ~${formatMoney(cargoValue(s, b))} por ciclo</span>
+        </button>`;
+      })
+      .join("");
+    slot.innerHTML = `<div class="modal-backdrop"><div class="modal buyers-modal">
+      <h2>¿Qué barco lleva ${cand.name}?</h2>
+      <p>${tr?.name ?? ""}: ${tr?.desc ?? ""}.</p>
+      ${rows}
+      <div class="row"><button class="btn" data-action="close-modal">Mejor luego</button></div>
+    </div></div>`;
+    slot.querySelectorAll<HTMLButtonElement>("[data-assign]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        this.closeModal();
+        this.act.hireSkipper(index, Number(btn.dataset.assign));
+      }, { once: true });
+    });
+  }
+
   private showRenameModal(): void {
     const s = this.getState();
     const slot = document.getElementById("modal-slot")!;
@@ -1048,14 +1127,26 @@ export class UI {
   }
 
   // ------------------------------------------------------------------ toasts
+  /**
+   * Máx. 2 toasts visibles; el resto hace cola (antes se apilaban sin límite y
+   * una ráfaga de logros tapaba media pantalla y el botón "Cobrar todo").
+   */
+  private toastQueue: string[] = [];
   toast(text: string): void {
     const box = document.getElementById("toasts")!;
+    if (box.children.length >= 2) {
+      if (this.toastQueue.length < 8) this.toastQueue.push(text);
+      return;
+    }
     const el = document.createElement("div");
     el.className = "toast";
     el.textContent = text;
     box.appendChild(el);
-    setTimeout(() => el.remove(), 3200);
-    while (box.children.length > 3) box.firstElementChild!.remove();
+    setTimeout(() => {
+      el.remove();
+      const next = this.toastQueue.shift();
+      if (next !== undefined) this.toast(next);
+    }, 3200);
   }
 
   /** Posición del contador de dinero (destino de las monedas). */

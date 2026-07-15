@@ -21,6 +21,7 @@ import type { GameState } from "./types";
  * v7 → v8: compradores del puerto, Torre del Vigía y El Alba.
  * v8 → v9: el umbral de venta recuerda la última venta (anti re-sell).
  * v9 → v10: clima del día, desafío diario, pintura de barcos.
+ * v10 → v11: pausa del gestor y consejos one-shot (tips).
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -141,6 +142,11 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
       raw.lastSaleLifetime = prestiges > 0 ? best : 0;
     }
     raw.version = 9;
+  },
+  10: (raw) => {
+    if (typeof raw.managerPaused !== "boolean") raw.managerPaused = false;
+    if (!Array.isArray(raw.tips)) raw.tips = [];
+    raw.version = 11;
   },
 };
 

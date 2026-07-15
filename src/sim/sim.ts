@@ -181,11 +181,11 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
       else {
         // Llega a puerto con la carga.
         boat.cargo = cargoValue(state, boat);
-        // Tormenta arriesgada: puede perder media carga (lobos de mar y El Alba, nunca).
+        // Tormenta arriesgada: puede perder la carga ENTERA (lobos de mar y El Alba, nunca).
         if (stormActive && state.event!.choice === "risk" && boat.skipper?.trait !== "lobo"
             && boat.tier !== C.ALBA_TIER && nextRand(state) < C.STORM_LOSS_CHANCE) {
-          const lost = boat.cargo / 2;
-          boat.cargo -= lost;
+          const lost = boat.cargo;
+          boat.cargo = 0;
           events.push({ kind: "cargo_lost", boatId: boat.id, amount: lost });
         }
         boat.phase = "ready";
@@ -196,8 +196,8 @@ export function tick(state: GameState, dt: number, events: SimEvent[] = []): Sim
     }
   }
 
-  // Gestor: auto-cobra barcos listos cada X segundos -------------------------
-  if (state.managerLvl > 0) {
+  // Gestor: auto-cobra barcos listos cada X segundos (salvo en pausa) --------
+  if (state.managerLvl > 0 && !state.managerPaused) {
     state.managerT -= dt;
     const interval = C.MANAGER_INTERVALS[state.managerLvl - 1];
     let guard = 20;
@@ -343,6 +343,7 @@ function tickDrift(state: GameState, dt: number, events: SimEvent[]): void {
 function scheduleDrift(state: GameState): void {
   let t = C.DRIFT_INTERVAL_MIN_S + nextRand(state) * (C.DRIFT_INTERVAL_MAX_S - C.DRIFT_INTERVAL_MIN_S);
   if (hasRelic(state, "mapapirata")) t *= C.RELIC_DRIFT_FREQ;
+  t *= C.WEATHERS[Math.min(state.weather, C.WEATHERS.length - 1)].driftMult; // la niebla arrima cofres
   state.driftT = t;
 }
 
@@ -446,10 +447,18 @@ function tickOrder(state: GameState, dt: number, events: SimEvent[]): void {
   if (order) {
     order.remaining -= dt;
     if (order.remaining <= 0) {
-      // Oferta no aceptada o tiempo agotado: el cliente se va, sin castigo.
-      events.push({ kind: "order_gone" });
-      state.order = null;
-      state.orderT = C.ORDER_INTERVAL_MIN_S + nextRand(state) * (C.ORDER_INTERVAL_MAX_S - C.ORDER_INTERVAL_MIN_S);
+      if (order.stage === "active") {
+        // Pedido ACEPTADO y fallado: el cliente se va escaldado y el siguiente
+        // tarda más — declinar cuando no llegas pasa a ser la jugada lista.
+        events.push({ kind: "order_failed" });
+        state.order = null;
+        state.orderT = C.ORDER_FAIL_COOLDOWN_S;
+      } else {
+        // Oferta no aceptada: el cliente se va, sin castigo.
+        events.push({ kind: "order_gone" });
+        state.order = null;
+        state.orderT = C.ORDER_INTERVAL_MIN_S + nextRand(state) * (C.ORDER_INTERVAL_MAX_S - C.ORDER_INTERVAL_MIN_S);
+      }
     }
     return;
   }
@@ -703,6 +712,37 @@ export function tapKraken(state: GameState, events: SimEvent[] = []): ActionResu
   return { ok: true, gained: reward };
 }
 
+/**
+ * Aplacar al Kraken (v1.8): sueltas una fracción de la carga YA y se va sin botín.
+ * Alternativa al tap-frenesí cuando llevas las bodegas llenas o no puedes teclear.
+ */
+export function appeaseKraken(state: GameState, events: SimEvent[] = []): ActionResult {
+  const ev = state.event;
+  if (!ev || ev.kind !== "kraken" || ev.stage !== "active" || ev.tapsLeft <= 0) {
+    return { ok: false, reason: "no_kraken" };
+  }
+  let lost = 0;
+  for (const b of state.boats) {
+    if (b.cargo > 0 && b.tier !== C.ALBA_TIER) {
+      const bite = b.cargo * C.KRAKEN_APPEASE_LOSS;
+      b.cargo -= bite;
+      lost += bite;
+    }
+  }
+  events.push({ kind: "kraken_appeased", lost });
+  events.push({ kind: "event_end", event: "kraken" });
+  state.event = null;
+  state.eventT = C.EVENT_INTERVAL_MIN_S + nextRand(state) * (C.EVENT_INTERVAL_MAX_S - C.EVENT_INTERVAL_MIN_S);
+  return { ok: true };
+}
+
+/** Pausa/despierta al gestor (para cobrar a mano: rachas, doradas, precio alto). */
+export function toggleManagerPause(state: GameState): ActionResult {
+  if (state.managerLvl === 0) return { ok: false, reason: "no_manager" };
+  state.managerPaused = !state.managerPaused;
+  return { ok: true };
+}
+
 /** El paquete del pescador: regalo diario con racha (reloj de pared). */
 export function claimGift(state: GameState, now: number, events: SimEvent[] = []): { day: number; amount: number } | null {
   const hoursSince = (now - state.gift.lastAt) / 3_600_000;
@@ -766,16 +806,21 @@ export function resolveStorm(state: GameState, choice: "shelter" | "risk"): Acti
   return { ok: true };
 }
 
-/** Ficha al candidato `index` de la taberna: va al mejor barco sin patrón. */
-export function hireSkipper(state: GameState, index: number, events: SimEvent[] = []): ActionResult {
+/**
+ * Ficha al candidato `index` de la taberna. Con `boatId` el jugador elige el
+ * barco (v1.8: el rasgo × barco es SU decisión); sin él, al mejor sin patrón.
+ */
+export function hireSkipper(state: GameState, index: number, events: SimEvent[] = [], boatId?: number): ActionResult {
   const cand = state.tavern.candidates[index];
   if (!cand) return { ok: false, reason: "no_candidate" };
   const free = state.boats.filter((b) => !b.skipper);
   if (free.length === 0) return { ok: false, reason: "no_boat" };
+  const chosen = boatId !== undefined ? free.find((b) => b.id === boatId) : undefined;
+  if (boatId !== undefined && !chosen) return { ok: false, reason: "bad_boat" };
   if (state.money < cand.cost) return { ok: false, reason: "poor" };
   state.money -= cand.cost;
-  // Al mando del barco más valioso sin patrón (donde el rasgo rinde más).
-  const boat = free.reduce((a, b) => (cargoValue(state, b) > cargoValue(state, a) ? b : a));
+  // Elegido por el jugador o, por defecto, el barco más valioso sin patrón.
+  const boat = chosen ?? free.reduce((a, b) => (cargoValue(state, b) > cargoValue(state, a) ? b : a));
   boat.skipper = { name: cand.name, trait: cand.trait };
   state.tavern.candidates.splice(index, 1);
   state.tavern.refreshT = C.TAVERN_REFRESH_S;
@@ -840,6 +885,7 @@ export function doPrestige(state: GameState, now: number, buyerId = "naviera", e
   state.lonjaLvl = 0;
   state.managerLvl = 0;
   state.managerT = 0;
+  state.managerPaused = false;
   state.zonesUnlocked = 0;
   state.combo = { n: 0, t: 0 };
   state.vigia = false;

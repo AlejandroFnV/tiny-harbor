@@ -107,6 +107,8 @@ export interface GameState {
   managerLvl: number;
   /** Timer interno del gestor (s hasta el próximo auto-cobro). */
   managerT: number;
+  /** Gestor en pausa (el jugador quiere cobrar a mano: rachas, doradas). */
+  managerPaused: boolean;
   /** Índice de la zona más lejana desbloqueada. */
   zonesUnlocked: number;
 
@@ -168,6 +170,8 @@ export interface GameState {
   /** Tiempo total jugado (s, esta vuelta). */
   playTime: number;
   tutorialStep: number;
+  /** Consejos one-shot ya mostrados (racha, mercado…). PERSISTEN entre prestigios. */
+  tips: string[];
 
   settings: { muted: boolean; music: boolean };
   stats: {
@@ -220,4 +224,6 @@ export type SimEvent =
   | { kind: "kraken_repelled"; amount: number }
   | { kind: "kraken_escaped"; lost: number }
   | { kind: "weather_change"; weather: number }
-  | { kind: "daily_done"; reward: number; text: string };
+  | { kind: "daily_done"; reward: number; text: string }
+  | { kind: "kraken_appeased"; lost: number }
+  | { kind: "order_failed" };
