@@ -331,6 +331,7 @@ export const RELICS: RelicDef[] = [
   { id: "astrolabio", name: "Astrolabio de marfil", desc: "Cada toque al banco de peces rinde un 50% más" },
   { id: "boya", name: "Boya cantarina", desc: "Los cofres a la deriva flotan un 60% más antes de hundirse" },
   { id: "ojovidrio", name: "Ojo de vidrio", desc: "Las capturas doradas salen el doble de a menudo" },
+  { id: "cuerda", name: "Cuerda de la suerte", desc: "3 toques extra en cada banco de peces" },
 ];
 
 export const RELIC_SPEED = 0.06;
@@ -351,6 +352,8 @@ export const RELIC_FRENZY_BONUS = 0.5;
 export const RELIC_DRIFT_LIFETIME = 0.6;
 /** Ojo de vidrio: multiplica la probabilidad de captura dorada. */
 export const RELIC_GOLDEN_MULT = 2;
+/** Cuerda de la suerte: toques extra al arrancar un banco de peces. */
+export const RELIC_FRENZY_TAPS = 3;
 
 // ---------------------------------------------------------------------------
 // Eventos aleatorios
@@ -648,6 +651,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "billon", name: "Leyenda de la lonja", desc: "Gana 1B en total" },
   { id: "prestigio1", name: "Empezar de cero", desc: "Vende tu primer puerto" },
   { id: "prestigio5", name: "Serial vendedor", desc: "Vende 5 puertos" },
+  { id: "prestigio10", name: "Magnate del puerto", desc: "Vende 10 puertos" },
   { id: "peces10", name: "Coleccionista", desc: "Descubre 10 especies" },
   { id: "pecesall", name: "Pescadoteca completa", desc: "Descubre TODAS las especies" },
   { id: "taps100", name: "Dedos de acero", desc: "100 taps a bancos de peces" },

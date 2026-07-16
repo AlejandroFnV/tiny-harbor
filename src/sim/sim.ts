@@ -407,6 +407,7 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   billon: (s) => s.totalEarned >= 1e9,
   prestigio1: (s) => s.prestiges >= 1,
   prestigio5: (s) => s.prestiges >= 5,
+  prestigio10: (s) => s.prestiges >= 10,
   peces10: (s) => s.discovered.length >= 10,
   pecesall: (s) => s.discovered.length >= C.SPECIES.length,
   taps100: (s) => s.stats.taps >= 100,
@@ -527,9 +528,10 @@ function tickEvent(state: GameState, dt: number, events: SimEvent[]): void {
 
   const canStorm = state.boats.length >= C.STORM_MIN_BOATS;
   const kind = canStorm && nextRand(state) < 0.5 ? "storm" : "frenzy";
+  const frenzyTaps = C.FRENZY_MAX_TAPS + (hasRelic(state, "cuerda") ? C.RELIC_FRENZY_TAPS : 0);
   const next: ActiveEvent =
     kind === "frenzy"
-      ? { kind, stage: "active", remaining: C.FRENZY_DURATION_S, tapsLeft: C.FRENZY_MAX_TAPS }
+      ? { kind, stage: "active", remaining: C.FRENZY_DURATION_S, tapsLeft: frenzyTaps }
       : { kind, stage: "warning", remaining: C.STORM_WARNING_S, tapsLeft: 0 };
   state.event = next;
   events.push({ kind: "event_start", event: kind });

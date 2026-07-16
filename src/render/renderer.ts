@@ -114,6 +114,11 @@ export class Renderer {
   private cat = { fx: 0.45, target: 0.45, tail: 0, moveT: 20 };
   // Humo de chimenea por barco (timer hasta el próximo puff).
   private boatSmoke = new Map<number, number>();
+  // Farolillos flotantes (raro, de noche): ascienden con vaivén y se apagan arriba.
+  private lanterns: { x: number; y: number; vy: number; sway: number; hue: number }[] = [];
+  private lanternTimer = 70;
+  // Pez ambiental que salta de vez en cuando (de día).
+  private jumpTimer = 10;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -240,6 +245,8 @@ export class Renderer {
     this.shootTimer = 0;
     this.whale.timer = 0;
     this.aurora.timer = 0;
+    this.lanternTimer = 0;
+    this.jumpTimer = 0;
   }
 
   onSimEvents(events: SimEvent[], state: GameState): void {
@@ -314,6 +321,7 @@ export class Renderer {
     this.drawSky(g, pal, step, dayT, night, storm, dt);
     this.drawShore(g, state, pal, step, night, dt); // pueblo en la orilla del fondo
     this.drawSea(g, pal, storm + (weather === 3 ? 0.5 : 0)); // marejada: mar picada
+    this.drawCaustics(g, pal, night, storm);
     this.drawLightReflection(g, pal, night, storm);
     this.drawTownReflection(g, pal, night, storm);
     this.drawRainbow(g, weather, night, storm);
@@ -338,6 +346,8 @@ export class Renderer {
     this.drawKraken(g, state, pal);
     this.clientVisible = state.order !== null;
     this.drawPier(g, pal, step, night, dt);
+    this.drawJumpingFish(dt, night, storm);
+    this.drawLanterns(g, pal, night, storm, dt);
 
     if (storm > 0) this.drawStorm(g, dt, storm, stormActive, pal);
     if (storm === 0) this.drawWeather(g, weather, pal, dt);
@@ -663,6 +673,99 @@ export class Renderer {
       g.beginPath();
       g.arc(cx, cy, r0 + b, Math.PI * 1.16, Math.PI * 1.84);
       g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+
+  // --- pez ambiental que salta: arco corto con salpicadura (de día) ------------------
+  private drawJumpingFish(dt: number, night: number, storm: number): void {
+    if (night > 0.55 || storm > 0) return;
+    this.jumpTimer -= dt;
+    if (this.jumpTimer > 0) return;
+    this.jumpTimer = 7 + Math.random() * 12;
+    const x = this.aw * (0.15 + Math.random() * 0.7);
+    const y = this.horizonY + this.seaH * (0.35 + Math.random() * 0.4);
+    // Salpica al salir y un pececillo saltando.
+    this.particles.splash(x * this.px, y * this.px, 5, "#bcd8cf");
+    this.particles.fish(x * this.px, y * this.px);
+  }
+
+  // --- farolillos flotantes: raro festival nocturno, ascienden con vaivén -----------
+  private drawLanterns(
+    g: CanvasRenderingContext2D,
+    pal: PixelPalette,
+    night: number,
+    storm: number,
+    dt: number,
+  ): void {
+    if (this.lanterns.length === 0) {
+      if (night > 0.65 && storm === 0) {
+        this.lanternTimer -= dt;
+        if (this.lanternTimer <= 0) {
+          const n = 8 + Math.floor(Math.random() * 6);
+          for (let i = 0; i < n; i++) {
+            this.lanterns.push({
+              x: this.aw * (0.08 + Math.random() * 0.84),
+              y: this.pierY - 2 + Math.random() * 6,
+              vy: 3 + Math.random() * 3,
+              sway: Math.random() * Math.PI * 2,
+              hue: Math.random() < 0.5 ? 0 : 1,
+            });
+          }
+          this.lanternTimer = 130 + Math.random() * 160;
+        }
+      }
+      return;
+    }
+    for (let i = this.lanterns.length - 1; i >= 0; i--) {
+      const l = this.lanterns[i];
+      l.y -= l.vy * dt;
+      l.sway += dt;
+      const x = Math.round(l.x + Math.sin(l.sway * 0.8) * 4);
+      const y = Math.round(l.y);
+      if (y < 2) {
+        this.lanterns.splice(i, 1);
+        continue;
+      }
+      // Desvanece al acercarse a lo alto del cielo.
+      const fade = y < this.horizonY ? Math.max(0, (y - 4) / (this.horizonY - 4)) : 1;
+      const col = l.hue === 0 ? pal.must : pal.coral;
+      // Halo cálido.
+      g.globalAlpha = 0.18 * fade * night;
+      g.fillStyle = col;
+      g.fillRect(x - 2, y - 2, 5, 5);
+      // Cuerpo del farolillo.
+      g.globalAlpha = 0.9 * fade * night;
+      g.fillRect(x, y, 2, 3);
+      g.globalAlpha = fade * night;
+      g.fillStyle = pal.white;
+      g.fillRect(x, y + 1, 1, 1);
+    }
+    g.globalAlpha = 1;
+  }
+
+  // --- caústicas: destellos de luz derivando por la superficie (agua viva) -----------
+  private drawCaustics(g: CanvasRenderingContext2D, pal: PixelPalette, night: number, storm: number): void {
+    if (storm > 0) return;
+    const amt = 1 - night * 0.7;
+    if (amt <= 0.05) return;
+    const top = this.horizonY + 2;
+    const bottom = this.pierY - 2;
+    const H = bottom - top;
+    g.fillStyle = pal.foam;
+    const N = Math.round(this.aw / 12);
+    for (let i = 0; i < N; i++) {
+      const r = visRand(i * 37 + 5);
+      const bx = r();
+      const by = r();
+      const sp = 0.3 + r() * 0.7;
+      const ph = r() * Math.PI * 2;
+      const x = (((bx + this.t * sp * 0.012) % 1) + 1) % 1;
+      const y = top + by * H;
+      const tw = Math.sin(this.t * 1.4 + ph);
+      if (tw < 0.25) continue;
+      g.globalAlpha = amt * (tw - 0.25) * 0.4 * (0.5 + by * 0.5);
+      g.fillRect(Math.round(x * this.aw), Math.round(y), 2 + Math.round(by * 2), 1);
     }
     g.globalAlpha = 1;
   }
