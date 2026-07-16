@@ -712,6 +712,9 @@ if (new URLSearchParams(location.search).has("dev")) {
       state.totalEarned += n;
     },
     save: persist,
+    forceAmbient() {
+      renderer.forceAmbient();
+    },
     wipe() {
       clearStorage();
       location.reload();

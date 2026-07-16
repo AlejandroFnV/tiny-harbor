@@ -15,10 +15,12 @@ import {
   BOATS,
   BOLLARD,
   BUBBLE,
+  CAT,
   CLIENT,
   CLOUDS,
   CRATE_PILE,
   CRATES,
+  DOLPHIN,
   DRIFT_CHESTS,
   GULL_A,
   GULL_B,
@@ -87,6 +89,25 @@ export class Renderer {
   private lastTownKey = "";
   private lastTownCount = 0;
   private clientVisible = false;
+
+  // Foco de luz (sol de día / luna de noche): fracción x en [0,1] + intensidad.
+  private lightX = 0.5;
+  private lightAmt = 1;
+  // Delfines saltando en pod (arcos): cada uno con progreso propio.
+  private dolphins: {
+    x: number; y0: number; t: number; span: number; dir: number; amp: number; lp: number;
+  }[] = [];
+  private dolphinTimer = 14;
+  // Bandada en V (amanecer/atardecer).
+  private flock: { x: number; y: number; vx: number; n: number; active: boolean; flap: number } = {
+    x: 0, y: 0, vx: 0, n: 0, active: false, flap: 0,
+  };
+  private flockTimer = 30;
+  // Estrella fugaz (noche).
+  private shootStar = { x: 0, y: 0, vx: 0, vy: 0, life: 0, active: false };
+  private shootTimer = 12;
+  // Gato del muelle: se sienta y de vez en cuando cambia de sitio.
+  private cat = { fx: 0.45, target: 0.45, tail: 0, moveT: 20 };
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -206,6 +227,14 @@ export class Renderer {
     return this.shoalPos;
   }
 
+  /** Dev/QA: fuerza el spawn de fauna ambiental para poder capturarla. */
+  forceAmbient(): void {
+    this.dolphinTimer = 0;
+    this.flockTimer = 0;
+    this.shootTimer = 0;
+    this.whale.timer = 0;
+  }
+
   onSimEvents(events: SimEvent[], state: GameState): void {
     for (const ev of events) {
       switch (ev.kind) {
@@ -275,11 +304,15 @@ export class Renderer {
     const weather = storm > 0 ? 0 : state.weather; // la tormenta manda sobre el clima
 
     g.clearRect(0, 0, this.aw, this.ah);
-    this.drawSky(g, pal, step, dayT, night, storm);
+    this.drawSky(g, pal, step, dayT, night, storm, dt);
     this.drawShore(g, state, pal, step, night, dt); // pueblo en la orilla del fondo
     this.drawSea(g, pal, storm + (weather === 3 ? 0.5 : 0)); // marejada: mar picada
+    this.drawLightReflection(g, pal, night, storm);
+    this.drawTownReflection(g, pal, night, storm);
     this.updateGulls(dt, night, storm, g);
+    this.drawFlock(g, dt, night, storm);
     this.drawFishSchool(g, dt, pal);
+    this.drawDolphins(g, dt, night, storm);
 
     this.drawWhale(g, dt, night);
 
@@ -296,7 +329,7 @@ export class Renderer {
     this.drawFrenzy(g, state, dt, pal);
     this.drawKraken(g, state, pal);
     this.clientVisible = state.order !== null;
-    this.drawPier(g, pal, step, night);
+    this.drawPier(g, pal, step, night, dt);
 
     if (storm > 0) this.drawStorm(g, dt, storm, stormActive, pal);
     if (storm === 0) this.drawWeather(g, weather, pal, dt);
@@ -323,6 +356,7 @@ export class Renderer {
     dayT: number,
     night: number,
     storm: number,
+    dt: number,
   ): void {
     const H = this.horizonY;
     // 4 bandas discretas + fila de dithering entre bandas (cielo de gradiente pixel).
@@ -340,16 +374,52 @@ export class Renderer {
       }
     }
 
+    // Hora dorada: en el paso día↔noche el horizonte se tiñe de coral/ámbar.
+    // golden ∈ [0,1], pico en plena transición (amanecer y atardecer).
+    const golden = storm > 0 ? 0 : 4 * night * (1 - night);
+    if (golden > 0.02) {
+      const bandH = Math.round(H * 0.42);
+      for (let y = H - bandH; y < H; y++) {
+        const tt = (y - (H - bandH)) / bandH; // 0 arriba de la franja, 1 en el horizonte
+        g.globalAlpha = golden * 0.5 * tt;
+        g.fillStyle = mix(pal.must, pal.coral, tt);
+        g.fillRect(0, y, this.aw, 1);
+      }
+      g.globalAlpha = 1;
+    }
+
     // Sol / luna en arco (a 2×: son protagonistas discretos, no motas).
     if (night < 0.95) {
       const p = Math.min(1, dayT / 0.55);
       const sx = Math.round(this.aw * (0.12 + 0.76 * p)) - SUN.w;
       const sy = Math.max(3, Math.round(H * (0.72 - Math.sin(p * Math.PI) * 0.5)) - SUN.h);
+      const cx = sx + SUN.w;
+      const cy = sy + SUN.h;
+      // Halo: anillos concéntricos translúcidos, más intensos en la hora dorada.
+      const glow = (0.1 + golden * 0.28) * (1 - night);
+      for (let ring = 3; ring >= 1; ring--) {
+        g.globalAlpha = glow * (0.28 / ring);
+        g.fillStyle = mix(pal.must, pal.coral, golden * 0.6);
+        const rr = SUN.w + ring * 5;
+        g.beginPath();
+        g.ellipse(cx, cy, rr, rr, 0, 0, Math.PI * 2);
+        g.fill();
+      }
       g.globalAlpha = 1 - night;
       g.drawImage(raster(SUN, step), sx, sy, SUN.w * 2, SUN.h * 2);
       g.globalAlpha = 1;
+      this.lightX = cx / this.aw;
+      this.lightAmt = (1 - night) * (0.6 + golden * 0.6);
     }
     if (night > 0.05) {
+      const mx = Math.round(this.aw * 0.72) + MOON.w;
+      const my = Math.round(H * 0.15) + MOON.h;
+      // Halo lunar tenue.
+      g.globalAlpha = night * 0.12;
+      g.fillStyle = pal.white;
+      g.beginPath();
+      g.ellipse(mx, my, MOON.w + 5, MOON.w + 5, 0, 0, Math.PI * 2);
+      g.fill();
       g.globalAlpha = night;
       g.drawImage(raster(MOON, step), Math.round(this.aw * 0.72), Math.round(H * 0.15), MOON.w * 2, MOON.h * 2);
       for (const s of this.stars) {
@@ -361,7 +431,12 @@ export class Renderer {
         }
       }
       g.globalAlpha = 1;
+      if (night > 0.5) {
+        this.lightX = mx / this.aw;
+        this.lightAmt = night * 0.5;
+      }
     }
+    this.drawShootingStar(g, dt, night, storm, pal);
 
     // Nubes a 2× (oscurecen con tormenta).
     for (const c of this.clouds) {
@@ -372,6 +447,50 @@ export class Renderer {
       g.drawImage(raster(spr, storm > 0 ? Math.max(step, 11) : step), cx, cy, spr.w * 2, spr.h * 2);
       g.globalAlpha = 1;
     }
+  }
+
+  // Estrella fugaz: raro destello diagonal en el cielo nocturno despejado.
+  private drawShootingStar(
+    g: CanvasRenderingContext2D,
+    dt: number,
+    night: number,
+    storm: number,
+    pal: PixelPalette,
+  ): void {
+    const s = this.shootStar;
+    if (!s.active) {
+      if (night > 0.6 && storm === 0) {
+        this.shootTimer -= dt;
+        if (this.shootTimer <= 0) {
+          s.active = true;
+          s.x = this.aw * (0.15 + Math.random() * 0.6);
+          s.y = this.horizonY * (0.1 + Math.random() * 0.4);
+          const dir = Math.random() < 0.5 ? 1 : -1;
+          s.vx = dir * (120 + Math.random() * 60);
+          s.vy = 55 + Math.random() * 40;
+          s.life = 0;
+          this.shootTimer = 14 + Math.random() * 26;
+        }
+      }
+      return;
+    }
+    s.life += dt;
+    s.x += s.vx * dt;
+    s.y += s.vy * dt;
+    if (s.life > 0.8) {
+      s.active = false;
+      return;
+    }
+    const fade = s.life < 0.15 ? s.life / 0.15 : 1 - (s.life - 0.15) / 0.65;
+    const dir = Math.sign(s.vx);
+    g.globalAlpha = Math.max(0, fade) * night;
+    // Cabeza + estela de 5 pasos que se atenúa hacia atrás.
+    for (let i = 0; i < 6; i++) {
+      g.globalAlpha = Math.max(0, fade) * night * (1 - i / 6);
+      g.fillStyle = i === 0 ? pal.white : pal.must;
+      g.fillRect(Math.round(s.x - dir * i * 2), Math.round(s.y - i), i === 0 ? 2 : 1, 1);
+    }
+    g.globalAlpha = 1;
   }
 
   private updateGulls(
@@ -461,6 +580,59 @@ export class Renderer {
     g.globalAlpha = 1;
   }
 
+  // --- reflejo del sol/luna: columna brillante que baja del foco de luz ---------------
+  private drawLightReflection(
+    g: CanvasRenderingContext2D,
+    pal: PixelPalette,
+    night: number,
+    storm: number,
+  ): void {
+    if (storm > 0 || this.lightAmt <= 0.02) return;
+    const cx = Math.round(this.lightX * this.aw);
+    const top = this.horizonY + 1;
+    const bottom = this.pierY - 1;
+    const col = night > 0.5 ? pal.foam : mix(pal.must, pal.white, 0.35);
+    g.fillStyle = col;
+    for (let y = top; y < bottom; y += 1) {
+      const depth = (y - top) / (bottom - top); // 0 horizonte, 1 primer plano
+      // Se ensancha al acercarse y ondea; los tramos parpadean (agua viva).
+      const width = 1 + depth * 5;
+      const wob = Math.sin(this.t * 2.4 + y * 0.6) * (1 + depth * 3);
+      const flick = Math.sin(this.t * (3 + depth * 4) + y * 1.3);
+      if (flick < 0.1) continue; // huecos → destello discontinuo, no barra sólida
+      g.globalAlpha = this.lightAmt * (0.5 - depth * 0.28) * Math.min(1, (flick - 0.1) * 2);
+      const bx = cx + Math.round(wob) - Math.round(width / 2);
+      g.fillRect(bx, y, Math.max(1, Math.round(width)), 1);
+    }
+    g.globalAlpha = 1;
+  }
+
+  // --- reflejo de las luces del pueblo en la franja de mar bajo la orilla -----------
+  private drawTownReflection(
+    g: CanvasRenderingContext2D,
+    pal: PixelPalette,
+    night: number,
+    storm: number,
+  ): void {
+    if (night < 0.35 || storm > 0) return;
+    const top = this.horizonY + 1;
+    // Fracciones donde suele haber ventanas encendidas (faro, casas, lonja, almacén).
+    const spots = [0.09, 0.18, 0.55, 0.72, 0.88];
+    g.fillStyle = pal.glassLit;
+    for (const fx of spots) {
+      const cx = Math.round(this.aw * fx);
+      for (let i = 0; i < 5; i++) {
+        const y = top + i;
+        const flick = Math.sin(this.t * 3 + cx + i * 1.7);
+        if (flick < 0.2) continue;
+        const wob = Math.round(Math.sin(this.t * 2 + y) * (0.5 + i * 0.4));
+        g.globalAlpha = night * (0.22 - i * 0.035) * Math.min(1, (flick - 0.2) * 2);
+        g.fillRect(cx + wob, y, 1 + (i > 2 ? 1 : 0), 1);
+      }
+    }
+    g.globalAlpha = 1;
+  }
+
   // --- barcos -----------------------------------------------------------------
   private drawBoat(
     g: CanvasRenderingContext2D,
@@ -506,6 +678,25 @@ export class Renderer {
     }
 
     g.drawImage(img, x, y);
+
+    // De noche: farol cálido sobre la cabina + reflejo temblón en el agua.
+    const night = step / NIGHT_STEPS;
+    if (night > 0.4) {
+      const gx = pos.x - Math.round(spr.w * 0.18);
+      const gy = y + Math.round(spr.h * 0.42);
+      g.fillStyle = pal.glassLit;
+      g.globalAlpha = 0.16 * night;
+      g.fillRect(gx - 5, gy - 3, 10, 6);
+      g.globalAlpha = 0.28 * night;
+      g.fillRect(gx - 2, gy - 1, 4, 3);
+      // Reflejo bajo el casco (unos guiones cálidos que ondean).
+      g.globalAlpha = 0.2 * night;
+      for (let ry = pos.y + 2; ry < pos.y + 6; ry++) {
+        const wob = Math.round(Math.sin(this.t * 2.2 + ry + boat.id));
+        g.fillRect(gx - 2 + wob, ry, 3, 1);
+      }
+      g.globalAlpha = 1;
+    }
 
     // Banderín de armador: recuerdo visible de los puertos vendidos.
     // 1+: coral · 4+: dorado · 10+: doble banderín.
@@ -698,6 +889,94 @@ export class Renderer {
     g.globalAlpha = 1;
   }
 
+  // --- delfines: pod que cruza porpoiseando (arcos fuera del agua) -------------------
+  private drawDolphins(
+    g: CanvasRenderingContext2D,
+    dt: number,
+    night: number,
+    storm: number,
+  ): void {
+    if (this.dolphins.length === 0) {
+      this.dolphinTimer -= dt;
+      if (this.dolphinTimer > 0 || storm > 0) return;
+      const dir = Math.random() < 0.5 ? 1 : -1;
+      const n = 2 + (Math.random() < 0.55 ? 1 : 0);
+      const y0 = this.horizonY + this.seaH * (0.3 + Math.random() * 0.16);
+      const startX = dir === 1 ? -12 : this.aw + 12;
+      const speed = 20 + Math.random() * 10;
+      for (let i = 0; i < n; i++) {
+        this.dolphins.push({
+          x: startX - dir * i * 13, y0, t: -i * 0.35, span: speed, dir,
+          amp: 8 + Math.random() * 4, lp: 0,
+        });
+      }
+      this.dolphinTimer = 20 + Math.random() * 32;
+      return;
+    }
+    const step = night > 0.5 ? NIGHT_STEPS : 0;
+    let anyOn = false;
+    for (const d of this.dolphins) {
+      d.x += d.dir * d.span * dt;
+      d.t += dt;
+      if ((d.dir === 1 && d.x < this.aw + 16) || (d.dir === -1 && d.x > -16)) anyOn = true;
+      const phase = ((d.t % 1.7) + 1.7) % 1.7;
+      // Fuera del agua durante los primeros 0.7s del ciclo (arco), luego se sumerge.
+      const up = phase < 0.7 ? Math.sin((phase / 0.7) * Math.PI) : 0;
+      // Zambullida: al pasar de fuera a dentro, salpica.
+      if (d.lp > 0 && up <= 0.02) {
+        this.particles.splash(d.x * this.px, d.y0 * this.px, 4, "#bcd8cf");
+      }
+      d.lp = up;
+      if (up > 0.02) {
+        const y = d.y0 - up * d.amp;
+        g.globalAlpha = 0.88;
+        g.drawImage(raster(DOLPHIN, step, { flip: d.dir === -1 }), Math.round(d.x), Math.round(y));
+        g.globalAlpha = 1;
+      }
+    }
+    if (!anyOn) this.dolphins.length = 0;
+  }
+
+  // --- bandada en echelon (skein migratorio, cruza alto) ----------------------------
+  private drawFlock(
+    g: CanvasRenderingContext2D,
+    dt: number,
+    night: number,
+    storm: number,
+  ): void {
+    const f = this.flock;
+    if (!f.active) {
+      this.flockTimer -= dt;
+      if (this.flockTimer <= 0 && storm === 0 && night < 0.75) {
+        f.active = true;
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        f.x = dir === 1 ? -24 : this.aw + 24;
+        f.vx = dir * (11 + Math.random() * 6);
+        f.y = this.horizonY * (0.18 + Math.random() * 0.3);
+        f.n = 5 + Math.floor(Math.random() * 3);
+        f.flap = 0;
+      }
+      return;
+    }
+    f.x += f.vx * dt;
+    f.flap += dt * 8;
+    if (f.x < -40 || f.x > this.aw + 40) {
+      f.active = false;
+      this.flockTimer = 40 + Math.random() * 70;
+      return;
+    }
+    const dir = Math.sign(f.vx);
+    const step = night > 0.5 ? NIGHT_STEPS : 0;
+    g.globalAlpha = 0.75 - night * 0.35;
+    for (let i = 0; i < f.n; i++) {
+      const bx = f.x - dir * i * 6;
+      const by = f.y + i * 2.4 + Math.sin(this.t * 1.5 + i) * 0.6;
+      const spr = Math.sin(f.flap * 2 + i * 0.8) > 0 ? GULL_A : GULL_B;
+      g.drawImage(raster(spr, step), Math.round(bx), Math.round(by));
+    }
+    g.globalAlpha = 1;
+  }
+
   // --- ballena ambiental (silueta lejana, puro sabor) ------------------------------
   private drawWhale(g: CanvasRenderingContext2D, dt: number, night: number): void {
     const w = this.whale;
@@ -763,6 +1042,12 @@ export class Renderer {
     dt: number,
   ): void {
     const hy = this.horizonY;
+
+    // Cabos lejanos: dos cadenas de colinas con bruma (perspectiva atmosférica).
+    // La cadena lejana está más alta, más difuminada hacia el cielo; la cercana
+    // se apoya en el horizonte. Perfil determinista (suma de senos) → estable.
+    this.drawFarShore(g, pal, night);
+
     // Franja de tierra sobre la línea de horizonte.
     g.fillStyle = pal.wood2;
     g.fillRect(0, hy - 2, this.aw, 2);
@@ -847,8 +1132,50 @@ export class Renderer {
     }
   }
 
+  // --- cabos lejanos: siluetas de tierra con bruma detrás del pueblo ---------------
+  private drawFarShore(g: CanvasRenderingContext2D, pal: PixelPalette, night: number): void {
+    const hy = this.horizonY;
+    const skyRef = pal.skyLo;
+    // Dos cadenas: [amplitud, altura base sobre horizonte, mezcla con cielo, fase].
+    const ranges: [number, number, number, number][] = [
+      [7, 22, 0.62, 1.7], // lejana: alta, muy hazy
+      [6, 13, 0.34, 0.4], // cercana: más baja, más sólida
+    ];
+    for (const [amp, baseH, haze, phase] of ranges) {
+      const col = mix(mix(pal.roof, pal.wood2, 0.4), skyRef, haze - night * 0.15);
+      g.fillStyle = col;
+      for (let x = 0; x < this.aw; x++) {
+        const u = x / this.aw;
+        // Perfil de colinas: dos senos de distinta frecuencia + un pico suave.
+        const h =
+          baseH +
+          Math.sin(u * Math.PI * 3 + phase) * amp * 0.6 +
+          Math.sin(u * Math.PI * 7 + phase * 2) * amp * 0.4;
+        const top = Math.round(hy - h);
+        g.fillRect(x, top, 1, hy - top);
+      }
+    }
+    // Una arista de luz de la hora dorada/día sobre la cima de la cadena cercana.
+    if (night < 0.6) {
+      g.globalAlpha = 0.25 * (1 - night);
+      g.fillStyle = pal.must;
+      for (let x = 0; x < this.aw; x += 1) {
+        const u = x / this.aw;
+        const h = 13 + Math.sin(u * Math.PI * 3 + 0.4) * 3.6 + Math.sin(u * Math.PI * 7 + 0.8) * 2.4;
+        g.fillRect(x, Math.round(hy - h), 1, 1);
+      }
+      g.globalAlpha = 1;
+    }
+  }
+
   // --- muelle cercano: deck bajo con props, los barcos amarran delante -------------
-  private drawPier(g: CanvasRenderingContext2D, pal: PixelPalette, step: number, night: number): void {
+  private drawPier(
+    g: CanvasRenderingContext2D,
+    pal: PixelPalette,
+    step: number,
+    night: number,
+    dt: number,
+  ): void {
     const y = this.pierY;
     const deckH = 6;
 
@@ -899,6 +1226,26 @@ export class Renderer {
     for (const p of props) {
       if (this.aw < 200 && (p.fx === 0.36 || p.fx === 0.88)) continue; // móvil: menos
       g.drawImage(raster(p.spr, step), Math.round(this.aw * p.fx), y - p.spr.h + 1);
+    }
+
+    // Gato del muelle: se sienta y de vez en cuando se muda a otro punto del deck.
+    const cat = this.cat;
+    cat.moveT -= dt;
+    cat.tail += dt;
+    if (cat.moveT <= 0) {
+      cat.target = 0.14 + Math.random() * 0.72;
+      cat.moveT = 14 + Math.random() * 16;
+    }
+    cat.fx += (cat.target - cat.fx) * Math.min(1, dt * 1.5);
+    const moving = Math.abs(cat.target - cat.fx) > 0.01;
+    const catX = Math.round(this.aw * cat.fx);
+    const catImg = raster(CAT, step, { flip: cat.target < cat.fx });
+    const catY = y - CAT.h + 1 - (moving && Math.sin(cat.tail * 12) > 0 ? 1 : 0); // trotecillo
+    g.drawImage(catImg, catX, catY);
+    // Coletazo cuando está sentado (parado).
+    if (!moving && Math.sin(cat.tail * 3) > 0.3) {
+      g.fillStyle = pal.ink;
+      g.fillRect(catX + (cat.target < cat.fx ? -1 : CAT.w), catY + 1, 1, 1);
     }
 
     // Cliente de la lonja esperando su pedido (balanceo sutil).

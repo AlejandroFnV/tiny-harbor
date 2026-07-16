@@ -495,7 +495,35 @@ export const CLOUDS: Sprite[] = [
     ".FFFFFFFF..",
     "FFFFFFFFFF.",
   ]),
+  // 3 · cúmulo largo y fino, para variedad de cielo
+  sprite("cloud3", { F: "white" }, [
+    ".......FFF........",
+    "...FFFFFFFFFFF....",
+    "FFFFFFFFFFFFFFFFF.",
+    ".FFFFFFFFFFFFFF...",
+  ]),
 ];
+
+// --- delfín ambiental (silueta que salta en arco) ---------------------------------
+export const DOLPHIN = sprite("dolphin", { I: "ink", F: "white" }, [
+  "........II..",
+  ".......III..",
+  ".I...IIIII..",
+  ".II.IIIII...",
+  "..IIIIIII...",
+  "...IIIII....",
+  "....I.......",
+]);
+
+// --- gato del muelle (siluetita, cola arriba) -------------------------------------
+export const CAT = sprite("cat", { I: "ink", M: "must" }, [
+  "I.....I.",
+  "II...III",
+  ".IIIIIII",
+  ".IIIIIII",
+  ".IIIIIII",
+  ".II..II.",
+]);
 
 export const FISH = sprite("fish", { G: "foam", I: "ink" }, [
   ".GGG..",
@@ -604,6 +632,21 @@ const FISH_SHAPES: Record<string, Sprite> = {
     "B..B.B..B.",
     "..B...B...",
   ]),
+  dolphin: sprite("f-dolphin", F, [
+    ".....BB.......",
+    "...BBBBBBBB...",
+    ".BBBBBBBBBBBI.",
+    "BBBBBBBBBB....",
+    "..BB...BBB....",
+  ]),
+  medusa: sprite("f-medusa", F, [
+    "..BBBB..",
+    ".BBBBBB.",
+    ".BBBBBB.",
+    ".B.BB.B.",
+    "B.B.B.B.",
+    ".B.B.B.B",
+  ]),
 };
 
 /** Silueta y color por especie de config. */
@@ -641,6 +684,9 @@ const SPECIES_ART: Record<string, { shape: keyof typeof FISH_SHAPES; color: stri
   medusaeterna: { shape: "round", color: "#d8a8c8" },
   pezremo: { shape: "eel", color: "#d44a4a" },
   kraken: { shape: "squid", color: "#5e3a52" },
+  // v1.9
+  delfin: { shape: "dolphin", color: "#5f7d95" },
+  aurora: { shape: "medusa", color: "#7fd8c0" },
 };
 
 const fishURLCache = new Map<string, string>();

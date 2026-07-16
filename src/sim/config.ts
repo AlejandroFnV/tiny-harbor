@@ -328,6 +328,7 @@ export const RELICS: RelicDef[] = [
   { id: "mascaron", name: "Mascarón de sirena", desc: "La racha aguanta 4 eslabones más" },
   { id: "colmillo", name: "Colmillo de kraken", desc: "+25% de ingresos faenando en tormenta" },
   { id: "perlanegra", name: "Perla negra", desc: "+1% de ingresos por puerto vendido" },
+  { id: "astrolabio", name: "Astrolabio de marfil", desc: "Cada toque al banco de peces rinde un 50% más" },
 ];
 
 export const RELIC_SPEED = 0.06;
@@ -342,6 +343,8 @@ export const RELIC_OFFLINE_S = 45 * 60;
 export const RELIC_COMBO_EXTRA = 4;
 export const RELIC_STORM_BONUS = 0.25;
 export const RELIC_PRESTIGE_INCOME = 0.01;
+/** Astrolabio de marfil: +50% al burst de cada toque en el banco de peces. */
+export const RELIC_FRENZY_BONUS = 0.5;
 
 // ---------------------------------------------------------------------------
 // Eventos aleatorios
@@ -462,6 +465,7 @@ export const SPECIES: SpeciesDef[] = [
   { id: "dorada", name: "Dorada", zone: 1, rarity: "comun" },
   { id: "lubina", name: "Lubina", zone: 1, rarity: "comun" },
   { id: "pulpo", name: "Pulpo", zone: 1, rarity: "rara" },
+  { id: "delfin", name: "Delfín", zone: 1, rarity: "rara" },
   { id: "morena", name: "Morena", zone: 1, rarity: "epica" },
   // Bajío
   { id: "bonito", name: "Bonito", zone: 2, rarity: "comun" },
@@ -495,6 +499,7 @@ export const SPECIES: SpeciesDef[] = [
   { id: "reysol", name: "Rey Sol", zone: 2, rarity: "leyenda", hint: "Solo se deja ver cuando el sol está en lo más alto" },
   { id: "sierpe", name: "Sierpe de Tormenta", zone: 3, rarity: "leyenda", hint: "Solo muerde el anzuelo de quien faena bajo la tormenta" },
   { id: "farolreal", name: "Pez Farol Real", zone: 4, rarity: "leyenda", hint: "Su luz solo se distingue en plena noche" },
+  { id: "aurora", name: "Medusa Aurora", zone: 4, rarity: "leyenda", hint: "Su fulgor solo se adivina entre la niebla del mar" },
   { id: "fantasma", name: "El Fantasma Blanco", zone: 7, rarity: "leyenda", hint: "Solo aparece ante manos que no paran: racha de 10 o más" },
 ];
 
@@ -654,7 +659,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "kraken1", name: "A cañonazos de dedo", desc: "Ahuyenta al Kraken" },
   { id: "kraken5", name: "Terror de terrores", desc: "Ahuyenta al Kraken 5 veces" },
   { id: "leyenda1", name: "Cuento de taberna", desc: "Pesca tu primera leyenda" },
-  { id: "leyendas4", name: "Las cuatro leyendas", desc: "Pesca las 4 leyendas del mar" },
+  { id: "leyendas4", name: "Las cuatro leyendas", desc: "Pesca 4 leyendas del mar" },
+  { id: "leyendas5", name: "Todas las leyendas", desc: "Pesca las 5 leyendas del mar" },
   { id: "fiel7", name: "Sal en las venas", desc: "Vuelve al puerto 7 días seguidos" },
   { id: "alba1", name: "El amanecer", desc: "Bota El Alba, el barco de leyenda" },
   { id: "tratos3", name: "Mano izquierda", desc: "Vende 3 puertos a compradores especiales" },

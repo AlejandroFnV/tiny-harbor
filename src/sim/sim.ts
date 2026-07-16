@@ -80,6 +80,7 @@ const LEGEND_CONDS: Record<string, (s: GameState) => boolean> = {
   reysol: (s) => isMidday(s),
   sierpe: (s) => s.event?.kind === "storm" && s.event.stage === "active" && s.event.choice === "risk",
   farolreal: (s) => isNight(s),
+  aurora: (s) => s.weather === 1, // niebla
   fantasma: (s) => s.combo.n >= 10,
 };
 
@@ -427,7 +428,8 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   meteorologo: (s) => s.stats.weathersFished === (1 << C.WEATHERS.length) - 1,
   desafios7: (s) => s.stats.dailiesDone >= 7,
   leyenda1: (s) => s.discovered.some((id) => LEGEND_CONDS[id] !== undefined),
-  leyendas4: (s) => Object.keys(LEGEND_CONDS).every((id) => s.discovered.includes(id)),
+  leyendas4: (s) => s.discovered.filter((id) => LEGEND_CONDS[id] !== undefined).length >= 4,
+  leyendas5: (s) => Object.keys(LEGEND_CONDS).every((id) => s.discovered.includes(id)),
   fiel7: (s) => s.stats.bestGiftStreak >= 7,
 };
 
@@ -770,7 +772,8 @@ export function tapShoal(state: GameState, events: SimEvent[] = []): ActionResul
   ev.tapsLeft--;
   let rate = 0;
   for (const b of state.boats) rate += cargoValue(state, b) / cycleTime(state, b);
-  const gained = Math.max(1, rate * C.FRENZY_TAP_SECONDS);
+  const astro = hasRelic(state, "astrolabio") ? 1 + C.RELIC_FRENZY_BONUS : 1;
+  const gained = Math.max(1, rate * C.FRENZY_TAP_SECONDS * astro);
   gainMoney(state, gained, events);
   state.stats.taps++;
   return { ok: true, gained };

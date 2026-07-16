@@ -51,10 +51,12 @@ export function weather(state: GameState): C.WeatherDef {
 
 const LEGEND_IDS = new Set(C.SPECIES.filter((s) => s.rarity === "leyenda").map((s) => s.id));
 
-/** El Alba se desbloquea al reunir las 4 leyendas. */
+/** El Alba se desbloquea al reunir 4 leyendas (hay 5; basta con cualquiera 4). */
+export const ALBA_LEGENDS_NEEDED = 4;
 export function albaUnlocked(state: GameState): boolean {
-  for (const id of LEGEND_IDS) if (!state.discovered.includes(id)) return false;
-  return true;
+  let n = 0;
+  for (const id of LEGEND_IDS) if (state.discovered.includes(id)) n++;
+  return n >= ALBA_LEGENDS_NEEDED;
 }
 
 export function ownsAlba(state: GameState): boolean {
