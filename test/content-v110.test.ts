@@ -21,8 +21,7 @@ function driftLife(withBoya: boolean): number {
 }
 
 describe("v1.10 contenido", () => {
-  it("existe la Boya cantarina (14 reliquias)", () => {
-    expect(C.RELICS.length).toBe(14);
+  it("existe la Boya cantarina", () => {
     expect(C.RELICS.some((r) => r.id === "boya")).toBe(true);
   });
 

@@ -111,7 +111,8 @@ function collectBoatInternal(state: GameState, boat: Boat, auto: boolean, events
     amount *= comboMult(state);
     if (state.market.mult >= C.MARKET_HIGH) state.stats.soldHigh++;
     state.stats.weathersFished |= 1 << state.weather; // logro meteorólogo
-    if (nextRand(state) < C.GOLDEN_CHANCE) {
+    const goldenChance = C.GOLDEN_CHANCE * (hasRelic(state, "ojovidrio") ? C.RELIC_GOLDEN_MULT : 1);
+    if (nextRand(state) < goldenChance) {
       amount *= C.GOLDEN_MULT;
       state.stats.goldenCatches++;
       events.push({ kind: "golden", boatId: boat.id, amount });
@@ -409,6 +410,7 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   peces10: (s) => s.discovered.length >= 10,
   pecesall: (s) => s.discovered.length >= C.SPECIES.length,
   taps100: (s) => s.stats.taps >= 100,
+  taps500: (s) => s.stats.taps >= 500,
   pedidos10: (s) => s.stats.ordersDone >= 10,
   tormentas5: (s) => s.stats.stormsRisked >= 5,
   patrones3: (s) => s.stats.skippersHired >= 3,
@@ -417,6 +419,7 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   racha10: (s) => s.stats.bestCombo >= 10,
   dorado5: (s) => s.stats.goldenCatches >= 5,
   cofres10: (s) => s.stats.driftsTapped >= 10,
+  cofres25: (s) => s.stats.driftsTapped >= 25,
   expedicion1: (s) => s.stats.expeditionsDone >= 1,
   expediciones5: (s) => s.stats.expeditionsDone >= 5,
   reliquias6: (s) => s.relics.length >= 6,

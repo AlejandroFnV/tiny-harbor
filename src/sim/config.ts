@@ -330,6 +330,7 @@ export const RELICS: RelicDef[] = [
   { id: "perlanegra", name: "Perla negra", desc: "+1% de ingresos por puerto vendido" },
   { id: "astrolabio", name: "Astrolabio de marfil", desc: "Cada toque al banco de peces rinde un 50% más" },
   { id: "boya", name: "Boya cantarina", desc: "Los cofres a la deriva flotan un 60% más antes de hundirse" },
+  { id: "ojovidrio", name: "Ojo de vidrio", desc: "Las capturas doradas salen el doble de a menudo" },
 ];
 
 export const RELIC_SPEED = 0.06;
@@ -348,6 +349,8 @@ export const RELIC_PRESTIGE_INCOME = 0.01;
 export const RELIC_FRENZY_BONUS = 0.5;
 /** Boya cantarina: +60% de tiempo a flote de los cofres a la deriva. */
 export const RELIC_DRIFT_LIFETIME = 0.6;
+/** Ojo de vidrio: multiplica la probabilidad de captura dorada. */
+export const RELIC_GOLDEN_MULT = 2;
 
 // ---------------------------------------------------------------------------
 // Eventos aleatorios
@@ -477,11 +480,13 @@ export const SPECIES: SpeciesDef[] = [
   { id: "mantaraya", name: "Manta raya", zone: 2, rarity: "epica" },
   // Alta mar
   { id: "atun", name: "Atún rojo", zone: 3, rarity: "comun" },
+  { id: "jurel", name: "Jurel", zone: 3, rarity: "comun" },
   { id: "pezespada", name: "Pez espada", zone: 3, rarity: "rara" },
   { id: "tiburon", name: "Tiburón azul", zone: 3, rarity: "epica" },
   // Abismo
   { id: "rape", name: "Rape abisal", zone: 4, rarity: "comun" },
   { id: "pezdragon", name: "Pez dragón", zone: 4, rarity: "rara" },
+  { id: "quimera", name: "Quimera abisal", zone: 4, rarity: "rara" },
   { id: "calamargigante", name: "Calamar gigante", zone: 4, rarity: "epica" },
   // La Fosa
   { id: "sable", name: "Pez sable", zone: 5, rarity: "comun" },
@@ -646,6 +651,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "peces10", name: "Coleccionista", desc: "Descubre 10 especies" },
   { id: "pecesall", name: "Pescadoteca completa", desc: "Descubre TODAS las especies" },
   { id: "taps100", name: "Dedos de acero", desc: "100 taps a bancos de peces" },
+  { id: "taps500", name: "Maestro del banco", desc: "500 taps a bancos de peces" },
   { id: "pedidos10", name: "Cliente fiel", desc: "Entrega 10 pedidos de la lonja" },
   { id: "tormentas5", name: "Temerario", desc: "Aguanta 5 tormentas faenando" },
   { id: "patrones3", name: "Casa llena", desc: "Ficha 3 patrones en la taberna" },
@@ -654,6 +660,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "racha10", name: "Manos de mercado", desc: "Encadena una racha de 10 cobros" },
   { id: "dorado5", name: "Toque de Midas", desc: "Pesca 5 capturas doradas" },
   { id: "cofres10", name: "Ojos en el agua", desc: "Pesca 10 cofres a la deriva" },
+  { id: "cofres25", name: "Rastreador de cofres", desc: "Pesca 25 cofres a la deriva" },
   { id: "expedicion1", name: "Mar adentro", desc: "Completa tu primera expedición" },
   { id: "expediciones5", name: "Cartas de otro mar", desc: "Completa 5 expediciones" },
   { id: "reliquias6", name: "Vitrina del pecio", desc: "Reúne 6 reliquias" },

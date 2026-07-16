@@ -706,6 +706,9 @@ const SPECIES_ART: Record<string, { shape: keyof typeof FISH_SHAPES; color: stri
   // v1.9
   delfin: { shape: "dolphin", color: "#5f7d95" },
   aurora: { shape: "medusa", color: "#7fd8c0" },
+  // v1.11
+  jurel: { shape: "long", color: "#8fa8bc" },
+  quimera: { shape: "ray", color: "#b7a4c0" },
 };
 
 const fishURLCache = new Map<string, string>();

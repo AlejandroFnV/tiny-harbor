@@ -112,6 +112,8 @@ export class Renderer {
   private aurora = { active: false, timer: 55, life: 0, dur: 0 };
   // Gato del muelle: se sienta y de vez en cuando cambia de sitio.
   private cat = { fx: 0.45, target: 0.45, tail: 0, moveT: 20 };
+  // Humo de chimenea por barco (timer hasta el próximo puff).
+  private boatSmoke = new Map<number, number>();
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -329,7 +331,7 @@ export class Renderer {
       .filter((b) => b.id !== away) // el barco de expedición está mar adentro
       .map((boat, idx) => ({ boat, idx, pos: this.boatArtPos(state, boat, idx) }))
       .sort((a, b) => a.pos.y - b.pos.y);
-    for (const { boat, pos } of order) this.drawBoat(g, boat, pos, step, pal, state.prestiges);
+    for (const { boat, pos } of order) this.drawBoat(g, boat, pos, step, pal, state.prestiges, dt);
 
     this.drawDrift(g, state, pal);
     this.drawFrenzy(g, state, dt, pal);
@@ -726,6 +728,7 @@ export class Renderer {
     step: number,
     pal: PixelPalette,
     prestiges = 0,
+    dt = 0,
   ): void {
     const spr = BOATS[Math.min(boat.tier, BOATS.length - 1)];
     const flip = boat.phase === "in"; // vuelve mirando a puerto
@@ -791,6 +794,19 @@ export class Renderer {
       g.globalAlpha = 0.28 * night;
       g.fillRect(gx - 2, gy - 1, 4, 3);
       g.globalAlpha = 1;
+    }
+
+    // Humo de la chimenea (barcos de motor, tiers 2–7): puffs periódicos.
+    if (boat.tier >= 2 && boat.tier <= 7 && dt > 0) {
+      let st = (this.boatSmoke.get(boat.id) ?? Math.random() * 1.2) - dt;
+      if (st <= 0) {
+        let sfx = boat.tier === 7 ? 0.52 : 0.28; // la factoría humea de sus stacks traseros
+        if (flip) sfx = 1 - sfx;
+        this.particles.smoke((x + spr.w * sfx) * this.px, (y + 1) * this.px);
+        st = 0.9 + Math.random() * 0.8;
+      }
+      this.boatSmoke.set(boat.id, st);
+      if (this.boatSmoke.size > 60) this.boatSmoke.clear();
     }
 
     // Banderín de armador: recuerdo visible de los puertos vendidos.
@@ -1106,6 +1122,16 @@ export class Renderer {
     const cx = Math.round(this.aw * 0.5);
     const cy = Math.round(this.horizonY + this.seaH * 0.5);
     this.shoalPos = { x: cx * this.px, y: cy * this.px };
+
+    // Gaviotas frenéticas: giran y pican sobre el banco (aprovechan el festín).
+    for (let i = 0; i < 4; i++) {
+      const ph = this.t * 1.1 + (i * Math.PI) / 2;
+      const bx = cx + Math.cos(ph) * (26 - (i % 2) * 8);
+      const dive = Math.max(0, Math.sin(this.t * 1.7 + i * 1.7));
+      const by = cy - 32 + dive * 26;
+      const spr = Math.sin(this.t * 11 + i) > 0 ? GULL_A : GULL_B;
+      g.drawImage(raster(spr, 0), Math.round(bx), Math.round(by));
+    }
     this.fishTimer -= dt;
     if (this.fishTimer <= 0) {
       this.particles.fish(

@@ -17,8 +17,7 @@ function fleet(): GameState {
 }
 
 describe("v1.9 contenido", () => {
-  it("hay 36 especies (delfín + Medusa Aurora) y 13 reliquias (astrolabio)", () => {
-    expect(C.SPECIES.length).toBe(36);
+  it("existen delfín, Medusa Aurora y la reliquia astrolabio", () => {
     expect(C.SPECIES.some((x) => x.id === "delfin")).toBe(true);
     expect(C.SPECIES.some((x) => x.id === "aurora" && x.rarity === "leyenda")).toBe(true);
     expect(C.RELICS.some((r) => r.id === "astrolabio")).toBe(true);

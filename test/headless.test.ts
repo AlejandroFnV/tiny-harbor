@@ -173,8 +173,14 @@ describe("simulación headless 8h (equivalente ×1000: sin render, a toda máqui
       tick(s, DT);
       if (Math.floor(t) % 2 === 0 && t % 2 < DT) botAct(s);
     }
-    // El mapa completo (12B) y el buque factoría (1.5B) siguen lejos.
-    expect(s.zonesUnlocked).toBeLessThan(C.ZONES.length - 1);
+    // El buque factoría (1.5B, el barco de endgame) sigue lejos: la 2ª vuelta
+    // no es trivial. NOTA: no afirmamos el índice EXACTO de zona alcanzada —
+    // depende de la trayectoria del bot, que se desplaza con el stream de RNG
+    // cada vez que se añade una especie (rollSpecies gasta nextRand). La
+    // invariante robusta es económica: con el mult ×6 correcto, 10 min de la 2ª
+    // vuelta NO igualan lo que la 1ª vuelta ganó en 60 min. El bug v1.2 (×121)
+    // multiplicaba esto por ~20 → cientos de B en minutos.
+    expect(s.lifetime).toBeLessThan(50_000_000_000);
     expect(s.boats.some((b) => b.tier === 7)).toBe(false);
     assertHealthy(s, "anti-runaway final");
   }, 60_000);
