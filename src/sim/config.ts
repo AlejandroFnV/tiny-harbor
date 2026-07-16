@@ -329,6 +329,7 @@ export const RELICS: RelicDef[] = [
   { id: "colmillo", name: "Colmillo de kraken", desc: "+25% de ingresos faenando en tormenta" },
   { id: "perlanegra", name: "Perla negra", desc: "+1% de ingresos por puerto vendido" },
   { id: "astrolabio", name: "Astrolabio de marfil", desc: "Cada toque al banco de peces rinde un 50% más" },
+  { id: "boya", name: "Boya cantarina", desc: "Los cofres a la deriva flotan un 60% más antes de hundirse" },
 ];
 
 export const RELIC_SPEED = 0.06;
@@ -345,6 +346,8 @@ export const RELIC_STORM_BONUS = 0.25;
 export const RELIC_PRESTIGE_INCOME = 0.01;
 /** Astrolabio de marfil: +50% al burst de cada toque en el banco de peces. */
 export const RELIC_FRENZY_BONUS = 0.5;
+/** Boya cantarina: +60% de tiempo a flote de los cofres a la deriva. */
+export const RELIC_DRIFT_LIFETIME = 0.6;
 
 // ---------------------------------------------------------------------------
 // Eventos aleatorios

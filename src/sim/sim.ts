@@ -336,7 +336,8 @@ function tickDrift(state: GameState, dt: number, events: SimEvent[]): void {
       break;
     }
   }
-  state.drift = { kind, x: 0.12 + nextRand(state) * 0.76, remaining: C.DRIFT_LIFETIME_S };
+  const life = C.DRIFT_LIFETIME_S * (hasRelic(state, "boya") ? 1 + C.RELIC_DRIFT_LIFETIME : 1);
+  state.drift = { kind, x: 0.12 + nextRand(state) * 0.76, remaining: life };
   state.driftT = 0;
   events.push({ kind: "drift_spawn", drift: kind });
 }

@@ -525,6 +525,25 @@ export const CAT = sprite("cat", { I: "ink", M: "must" }, [
   ".II..II.",
 ]);
 
+// --- pescador sentado en el borde del muelle (mira al mar, con caña) ---------------
+export const FISHERMAN = sprite("fisherman", { I: "ink", R: "roof", P: "paper", C: "coral" }, [
+  "..RRR.",
+  "..III.",
+  "..PPP.",
+  ".CCCCC",
+  "CCCCC.",
+  ".CCCC.",
+  ".I..I.",
+  ".I..I.",
+]);
+
+// --- gaviota posada en un bolardo -------------------------------------------------
+export const GULL_SIT = sprite("gullSit", { I: "ink", F: "white", M: "must" }, [
+  ".FFI",
+  "FFFF",
+  ".MM.",
+]);
+
 export const FISH = sprite("fish", { G: "foam", I: "ink" }, [
   ".GGG..",
   "GGGGGI",

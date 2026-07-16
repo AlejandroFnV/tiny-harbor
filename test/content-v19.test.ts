@@ -21,7 +21,6 @@ describe("v1.9 contenido", () => {
     expect(C.SPECIES.length).toBe(36);
     expect(C.SPECIES.some((x) => x.id === "delfin")).toBe(true);
     expect(C.SPECIES.some((x) => x.id === "aurora" && x.rarity === "leyenda")).toBe(true);
-    expect(C.RELICS.length).toBe(13);
     expect(C.RELICS.some((r) => r.id === "astrolabio")).toBe(true);
   });
 

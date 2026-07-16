@@ -22,8 +22,10 @@ import {
   CRATES,
   DOLPHIN,
   DRIFT_CHESTS,
+  FISHERMAN,
   GULL_A,
   GULL_B,
+  GULL_SIT,
   HOUSE,
   KRAKEN_EYES,
   KRAKEN_TENTACLE,
@@ -106,6 +108,8 @@ export class Renderer {
   // Estrella fugaz (noche).
   private shootStar = { x: 0, y: 0, vx: 0, vy: 0, life: 0, active: false };
   private shootTimer = 12;
+  // Aurora boreal (rara, de noche): cortinas de luz verde/teal/violeta.
+  private aurora = { active: false, timer: 55, life: 0, dur: 0 };
   // Gato del muelle: se sienta y de vez en cuando cambia de sitio.
   private cat = { fx: 0.45, target: 0.45, tail: 0, moveT: 20 };
 
@@ -233,6 +237,7 @@ export class Renderer {
     this.flockTimer = 0;
     this.shootTimer = 0;
     this.whale.timer = 0;
+    this.aurora.timer = 0;
   }
 
   onSimEvents(events: SimEvent[], state: GameState): void {
@@ -309,6 +314,7 @@ export class Renderer {
     this.drawSea(g, pal, storm + (weather === 3 ? 0.5 : 0)); // marejada: mar picada
     this.drawLightReflection(g, pal, night, storm);
     this.drawTownReflection(g, pal, night, storm);
+    this.drawRainbow(g, weather, night, storm);
     this.updateGulls(dt, night, storm, g);
     this.drawFlock(g, dt, night, storm);
     this.drawFishSchool(g, dt, pal);
@@ -405,6 +411,19 @@ export class Renderer {
         g.ellipse(cx, cy, rr, rr, 0, 0, Math.PI * 2);
         g.fill();
       }
+      // Rayos crepusculares: haces largos girando muy despacio (sunburst tenue).
+      const rays = 7;
+      g.fillStyle = mix(pal.must, pal.white, 0.35);
+      for (let i = 0; i < rays; i++) {
+        const ang = (i / rays) * Math.PI * 2 + this.t * 0.05;
+        g.globalAlpha = (0.05 + golden * 0.07) * (1 - night) * (0.55 + 0.45 * Math.sin(this.t * 0.6 + i));
+        g.beginPath();
+        g.moveTo(cx, cy);
+        g.lineTo(cx + Math.cos(ang - 0.03) * 150, cy + Math.sin(ang - 0.03) * 150);
+        g.lineTo(cx + Math.cos(ang + 0.03) * 150, cy + Math.sin(ang + 0.03) * 150);
+        g.closePath();
+        g.fill();
+      }
       g.globalAlpha = 1 - night;
       g.drawImage(raster(SUN, step), sx, sy, SUN.w * 2, SUN.h * 2);
       g.globalAlpha = 1;
@@ -436,6 +455,7 @@ export class Renderer {
         this.lightAmt = night * 0.5;
       }
     }
+    this.drawAurora(g, night, storm, dt);
     this.drawShootingStar(g, dt, night, storm, pal);
 
     // Nubes a 2× (oscurecen con tormenta).
@@ -447,6 +467,48 @@ export class Renderer {
       g.drawImage(raster(spr, storm > 0 ? Math.max(step, 11) : step), cx, cy, spr.w * 2, spr.h * 2);
       g.globalAlpha = 1;
     }
+  }
+
+  // Aurora boreal: cortinas onduladas de luz fría en el cielo, de noche y rara.
+  private drawAurora(g: CanvasRenderingContext2D, night: number, storm: number, dt: number): void {
+    const a = this.aurora;
+    if (!a.active) {
+      if (night > 0.7 && storm === 0) {
+        a.timer -= dt;
+        if (a.timer <= 0) {
+          a.active = true;
+          a.life = 0;
+          a.dur = 16 + Math.random() * 16;
+        }
+      }
+      return;
+    }
+    a.life += dt;
+    if (a.life > a.dur || storm > 0) {
+      a.active = false;
+      a.timer = 100 + Math.random() * 180;
+      return;
+    }
+    const env = Math.min(1, a.life / 3.5) * Math.min(1, (a.dur - a.life) / 3.5) * night;
+    const cols = ["#5fe0a2", "#48c6d6", "#9d82e0"];
+    const topBase = this.horizonY * 0.1;
+    for (let x = 0; x < this.aw; x += 2) {
+      const u = x / this.aw;
+      for (let band = 0; band < 3; band++) {
+        const phase = band * 2.1 + this.t * 0.22;
+        const yTop = topBase + band * 5 + Math.sin(u * Math.PI * 2 + phase) * 6 + Math.sin(u * 9 + phase) * 2;
+        const h = 20 + Math.sin(u * Math.PI * 3 + phase * 1.3) * 9;
+        const flick = 0.7 + 0.3 * Math.sin(this.t * 1.8 + x * 0.25 + band);
+        g.fillStyle = cols[band];
+        for (let seg = 0; seg < 3; seg++) {
+          g.globalAlpha = env * (0.09 + seg * 0.08) * flick;
+          const sy = Math.round(yTop + (h * seg) / 3);
+          if (sy < 1 || sy > this.horizonY - 4) continue;
+          g.fillRect(x, sy, 2, Math.ceil(h / 3));
+        }
+      }
+    }
+    g.globalAlpha = 1;
   }
 
   // Estrella fugaz: raro destello diagonal en el cielo nocturno despejado.
@@ -580,6 +642,29 @@ export class Renderer {
     g.globalAlpha = 1;
   }
 
+  // --- arcoíris: con llovizna y sol, un arco tenue corona el mar --------------------
+  private drawRainbow(
+    g: CanvasRenderingContext2D,
+    weather: number,
+    night: number,
+    storm: number,
+  ): void {
+    if (weather !== 2 || night > 0.4 || storm > 0) return; // solo llovizna de día
+    const cx = Math.round(this.aw * 0.5);
+    const cy = this.pierY + Math.round(this.aw * 0.08);
+    const r0 = cy - this.horizonY + 4;
+    const bands = ["#d9614a", "#e0904a", "#e6c24e", "#5b9a63", "#4a7ba6", "#8a6ac0"];
+    g.lineWidth = 1;
+    for (let b = 0; b < bands.length; b++) {
+      g.strokeStyle = bands[b];
+      g.globalAlpha = 0.16 - b * 0.006;
+      g.beginPath();
+      g.arc(cx, cy, r0 + b, Math.PI * 1.16, Math.PI * 1.84);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+  }
+
   // --- reflejo del sol/luna: columna brillante que baja del foco de luz ---------------
   private drawLightReflection(
     g: CanvasRenderingContext2D,
@@ -677,10 +762,26 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
+    const night = step / NIGHT_STEPS;
+
+    // Reflejo espejado del casco en el agua: filas mirror con ondeo y desvanecido.
+    // Solo para barcos con el agua debajo (no los amarrados pegados al muelle).
+    if (pos.y < this.pierY - 3) {
+      const baseY = pos.y + 2;
+      for (let r = 0; r < spr.h; r += 1) {
+        const dy = baseY + (spr.h - 1 - r);
+        if (dy >= this.pierY) break; // no reflejar sobre la madera del muelle
+        const depth = (spr.h - 1 - r) / spr.h;
+        const wob = Math.round(Math.sin(this.t * 2 + dy * 0.7 + boat.id) * (0.6 + depth * 2.2));
+        g.globalAlpha = (0.22 - depth * 0.15) * (night > 0.5 ? 0.65 : 1);
+        g.drawImage(img, 0, r, spr.w, 1, x + wob, dy, spr.w, 1);
+      }
+      g.globalAlpha = 1;
+    }
+
     g.drawImage(img, x, y);
 
-    // De noche: farol cálido sobre la cabina + reflejo temblón en el agua.
-    const night = step / NIGHT_STEPS;
+    // De noche: farol cálido sobre la cabina.
     if (night > 0.4) {
       const gx = pos.x - Math.round(spr.w * 0.18);
       const gy = y + Math.round(spr.h * 0.42);
@@ -689,12 +790,6 @@ export class Renderer {
       g.fillRect(gx - 5, gy - 3, 10, 6);
       g.globalAlpha = 0.28 * night;
       g.fillRect(gx - 2, gy - 1, 4, 3);
-      // Reflejo bajo el casco (unos guiones cálidos que ondean).
-      g.globalAlpha = 0.2 * night;
-      for (let ry = pos.y + 2; ry < pos.y + 6; ry++) {
-        const wob = Math.round(Math.sin(this.t * 2.2 + ry + boat.id));
-        g.fillRect(gx - 2 + wob, ry, 3, 1);
-      }
       g.globalAlpha = 1;
     }
 
@@ -1246,6 +1341,36 @@ export class Renderer {
     if (!moving && Math.sin(cat.tail * 3) > 0.3) {
       g.fillStyle = pal.ink;
       g.fillRect(catX + (cat.target < cat.fx ? -1 : CAT.w), catY + 1, 1, 1);
+    }
+
+    // Pescador sentado en el borde del muelle: caña + sedal con boya que bota.
+    const fmX = Math.round(this.aw * 0.9);
+    g.drawImage(raster(FISHERMAN, step), fmX, y - FISHERMAN.h + 1);
+    // Caña: palo diagonal desde la mano hacia el mar.
+    const handX = fmX + FISHERMAN.w;
+    const handY = y - FISHERMAN.h + 4;
+    const tipX = handX - 10;
+    const tipY = handY - 8;
+    g.strokeStyle = pal.wood2;
+    g.globalAlpha = 0.9;
+    g.beginPath();
+    g.moveTo(handX, handY);
+    g.lineTo(tipX, tipY);
+    g.stroke();
+    // Sedal + boya botando sobre el agua lejana.
+    const bobY = this.pierY - 3 + Math.round(Math.sin(this.t * 2) * 1.2);
+    g.globalAlpha = 0.4;
+    g.fillStyle = pal.ink;
+    g.fillRect(tipX, tipY, 1, bobY - tipY);
+    g.globalAlpha = 1;
+    g.fillStyle = pal.coral;
+    g.fillRect(tipX, bobY, 2, 2);
+
+    // Gaviota posada en un bolardo (aparece y se va cada tanto, con cabeceo).
+    if (Math.sin(this.t * 0.09) > -0.35) {
+      const bx = Math.round(this.aw * 0.5);
+      const nod = Math.sin(this.t * 2.5) > 0.7 ? 1 : 0;
+      g.drawImage(raster(GULL_SIT, step), bx - 1, y - BOLLARD.h - GULL_SIT.h + 1 + nod);
     }
 
     // Cliente de la lonja esperando su pedido (balanceo sutil).
