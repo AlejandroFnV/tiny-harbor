@@ -679,7 +679,16 @@ export class Renderer {
     anchors: string[],
     gamma: number,
   ): void {
-    const seg = anchors.length - 1;
+    // Ramp FINO: interpolamos muchos pasos intermedios entre las anclas. Así los
+    // dos colores que se ditheran en cada fila son casi idénticos → el damero
+    // apenas se nota (profundidad suave, sin el "grano" de dithering agresivo).
+    const ramp: string[] = [];
+    const PER = 6;
+    for (let i = 0; i < anchors.length - 1; i++) {
+      for (let k = 0; k < PER; k++) ramp.push(mix(anchors[i], anchors[i + 1], k / PER));
+    }
+    ramp.push(anchors[anchors.length - 1]);
+    const seg = ramp.length - 1;
     const B = Renderer.BAYER4;
     for (let y = 0; y < h; y++) {
       const t = h <= 1 ? 0 : Math.pow(y / (h - 1), gamma);
@@ -690,7 +699,7 @@ export class Renderer {
       const brow = B[y & 3];
       for (let x = 0; x < w; x++) {
         const thr = (brow[x & 3] + 0.5) / 16;
-        c.fillStyle = frac > thr ? anchors[hi] : anchors[lo];
+        c.fillStyle = frac > thr ? ramp[hi] : ramp[lo];
         c.fillRect(x, y, 1, 1);
       }
     }
@@ -723,9 +732,10 @@ export class Renderer {
       const ao = h <= 1 ? 0 : y / (h - 1); // más oscuro hacia la base
       for (let x = 0; x < w; x++) {
         const side = w <= 1 ? 0 : sunLeft ? x / (w - 1) : 1 - x / (w - 1); // lado en sombra
-        const shade = ao * 0.6 + side * 0.4;
+        // Suave: solo un toque de volumen (base + lado), sin granular el sprite.
+        const shade = ao * 0.4 + side * 0.2;
         if (shade > (B[y & 3][x & 3] + 0.5) / 16) {
-          c.fillStyle = "rgba(24,32,48,0.30)";
+          c.fillStyle = "rgba(24,32,48,0.16)";
           c.fillRect(x, y, 1, 1);
         }
       }
@@ -1502,8 +1512,8 @@ export class Renderer {
     for (const [amp, baseH, haze, phase] of ranges) {
       // Volumen: la cima recibe más bruma (se funde con el cielo), la base es más
       // sólida y oscura. Dithered entre las dos → relieve pixel-art sin banda dura.
-      const topCol = mix(rock, skyRef, Math.min(0.95, haze + 0.16 - night * 0.15));
-      const baseCol = mix(rock, skyRef, Math.max(0, haze - 0.12 - night * 0.15));
+      const topCol = mix(rock, skyRef, Math.min(0.95, haze + 0.07 - night * 0.15));
+      const baseCol = mix(rock, skyRef, Math.max(0, haze - 0.05 - night * 0.15));
       for (let x = 0; x < this.aw; x++) {
         const u = x / this.aw;
         // Perfil de colinas: dos senos de distinta frecuencia + un pico suave.
