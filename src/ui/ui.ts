@@ -26,6 +26,7 @@ import {
   nextZone,
   offlineCapSeconds,
   ownsAlba,
+  polarCost,
   prestigeGain,
   prestigeMult,
   prestigeOffers,
@@ -55,6 +56,7 @@ export interface UIActions {
   toggleManagerPause(): void;
   appeaseKraken(): void;
   buyLegacy(branch: C.LegacyBranch): void;
+  buyPolar(): void;
   unlockZone(): void;
   buyVigia(): void;
   prestige(buyerId: string): void;
@@ -269,6 +271,7 @@ export class UI {
         break;
       }
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
+      case "buy-polar": this.act.buyPolar(); break;
       case "unlock-zone": this.act.unlockZone(); break;
       case "buy-vigia": this.act.buyVigia(); break;
       case "prestige": this.confirmPrestige(); break;
@@ -584,6 +587,17 @@ export class UI {
             : `<button class="btn primary" data-action="buy-legacy" data-branch="${br.id}">Nivel ${lvl + 1}<span class="sub">${cost} rep</span></button>`}
         </div>`;
       }
+
+      // La Estrella Polar: carril de reputación SIN TECHO — la meta que nunca se acaba.
+      const pCost = polarCost(s);
+      const pBonus = Math.round(s.polarLvl * C.POLAR_INCOME_BONUS * 100);
+      html += `<div class="card legacy-card polar-card">
+        <div class="info">
+          <div class="name">La Estrella Polar <span class="polar-lvl">nivel ${s.polarLvl}</span></div>
+          <div class="desc">+${Math.round(C.POLAR_INCOME_BONUS * 100)}% de ingresos por nivel, sin límite${s.polarLvl > 0 ? ` · ahora +${pBonus}%` : ""}. Cuando el legado se llena, la reputación siempre tiene rumbo.</div>
+        </div>
+        <button class="btn primary" data-action="buy-polar">Nivel ${s.polarLvl + 1}<span class="sub">${pCost} rep</span></button>
+      </div>`;
     }
 
     // Reliquias del pecio: colección permanente con bonus únicos.
@@ -732,6 +746,8 @@ export class UI {
       const cost = legacyCost(s, btn.dataset.branch as C.LegacyBranch);
       btn.disabled = cost === null || s.reputation < cost;
     });
+    const polarBtn = document.querySelector<HTMLButtonElement>("[data-action='buy-polar']");
+    if (polarBtn) polarBtn.disabled = s.reputation < polarCost(s);
     const zoneBtn = document.querySelector<HTMLButtonElement>("[data-action='unlock-zone']");
     if (zoneBtn) {
       const cost = zoneCost(s);

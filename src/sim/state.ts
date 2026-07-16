@@ -47,6 +47,7 @@ export function newGame(now: number, seed = 1234567): GameState {
     discovered: [],
     tavern: { candidates: [], refreshT: C.TAVERN_REFRESH_S },
     legacy: { astillero: 0, escuela: 0, faro: 0 },
+    polarLvl: 0,
     achievements: [],
     combo: { n: 0, t: 0 },
     market: { mult: 1, t: C.MARKET_STEP_S, dir: 0 },
@@ -154,6 +155,8 @@ export function sanitize(state: GameState): GameState {
   for (const b of C.LEGACY_BRANCHES) {
     state.legacy[b.id] = Math.floor(num(state.legacy[b.id], 0, 0, C.LEGACY_MAX_LVL));
   }
+  // La Estrella Polar: carril infinito (sin techo de nivel; cap defensivo alto).
+  state.polarLvl = Math.floor(num(state.polarLvl, 0, 0, 100000));
 
   // Racha de cobro (el tope real puede ser mayor con el mascarón).
   if (!state.combo || typeof state.combo !== "object") state.combo = { n: 0, t: 0 };

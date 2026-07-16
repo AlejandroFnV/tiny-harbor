@@ -905,6 +905,22 @@ body {
   padding: 0 6px;
 }
 
+/* La Estrella Polar: carril infinito — acento dorado para separarla de las ramas. */
+.polar-card {
+  border-color: #b07d18;
+  background: linear-gradient(180deg, rgba(223, 169, 62, 0.14), var(--paper) 60%);
+}
+.polar-card .name::before {
+  content: "★ ";
+  color: #b07d18;
+}
+.polar-lvl {
+  font-size: 11px;
+  font-weight: 800;
+  color: #b07d18;
+  letter-spacing: 0.04em;
+}
+
 /* logros */
 .ach-grid {
   display: grid;

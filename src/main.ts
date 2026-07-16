@@ -17,6 +17,7 @@ import {
   appeaseKraken,
   buyBoat,
   buyLegacy,
+  buyPolar,
   buyVigia,
   checkDaily,
   claimGift,
@@ -310,6 +311,14 @@ const actions = {
       persist();
     } else audio.play("error");
     handleEvents(events);
+    ui.renderTab();
+  },
+  buyPolar() {
+    if (buyPolar(state).ok) {
+      audio.play("prestige");
+      ui.toast(`La Estrella Polar brilla más fuerte: +${Math.round(state.polarLvl * C.POLAR_INCOME_BONUS * 100)}% de ingresos para siempre.`);
+      persist();
+    } else audio.play("error");
     ui.renderTab();
   },
   unlockZone() {

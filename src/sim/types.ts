@@ -131,6 +131,8 @@ export interface GameState {
   tavern: { candidates: TavernCandidate[]; refreshT: number };
   /** Árbol de legado: nivel por rama. PERSISTE entre prestigios. */
   legacy: Record<LegacyBranch, number>;
+  /** La Estrella Polar: carril de reputación SIN TECHO (+% ingresos/nivel). PERSISTE. */
+  polarLvl: number;
   /** Logros conseguidos (ids). PERSISTEN entre prestigios. */
   achievements: string[];
 

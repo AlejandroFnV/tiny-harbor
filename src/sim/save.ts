@@ -23,6 +23,7 @@ import type { GameState } from "./types";
  * v9 → v10: clima del día, desafío diario, pintura de barcos.
  * v10 → v11: pausa del gestor y consejos one-shot (tips).
  * v11 → v12: ballena tappable (stats.whalesTapped).
+ * v12 → v13: La Estrella Polar (polarLvl) — sumidero de reputación infinito.
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -155,6 +156,11 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof stats.whalesTapped !== "number") stats.whalesTapped = 0;
     raw.stats = stats;
     raw.version = 12;
+  },
+  12: (raw) => {
+    // v1.14: La Estrella Polar (carril de reputación infinito).
+    if (typeof raw.polarLvl !== "number") raw.polarLvl = 0;
+    raw.version = 13;
   },
 };
 

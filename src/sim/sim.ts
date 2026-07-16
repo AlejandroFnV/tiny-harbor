@@ -27,6 +27,7 @@ import {
   isMidday,
   isNight,
   legacyCost,
+  polarCost,
   lonjaCost,
   managerCost,
   nextZone,
@@ -877,6 +878,15 @@ export function buyLegacy(state: GameState, branch: C.LegacyBranch, events: SimE
   state.reputation -= cost;
   state.legacy[branch]++;
   tickAchievements(state, events);
+  return { ok: true };
+}
+
+/** La Estrella Polar: carril de reputación SIN TECHO (+% ingresos permanente por nivel). */
+export function buyPolar(state: GameState): ActionResult {
+  const cost = polarCost(state);
+  if (state.reputation < cost) return { ok: false, reason: "poor" };
+  state.reputation -= cost;
+  state.polarLvl++;
   return { ok: true };
 }
 

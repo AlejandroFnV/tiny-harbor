@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -603,6 +603,22 @@ export const LEGACY_ASTILLERO_CARGO = 0.1;
 export const LEGACY_ESCUELA_SPEED = 0.09;
 export const LEGACY_FARO_OFFLINE_S = 2 * 3600;
 export const LEGACY_FARO_SPECIES = 0.35;
+
+// ---------------------------------------------------------------------------
+// La Estrella Polar (sumidero de reputación INFINITO del late game)
+// ---------------------------------------------------------------------------
+/**
+ * Cuando el árbol de legado se maxea (~78 rep) la reputación se quedaba sin dónde
+ * gastarse — solo alimentaba el multiplicador de forma pasiva — y el endgame se
+ * aplanaba: nada nuevo que decidir ni desbloquear. La Estrella Polar es un carril
+ * SIN TECHO: cada nivel cuesta más rep (geométrico) y da +% de ingresos permanente
+ * (persiste entre ventas). Auto-limitado: como el coste crece geométrico y la rep
+ * crece sublineal (cbrt del lifetime, con techo de overshoot), los niveles
+ * asequibles crecen ~log(rep) → da meta infinita sin desbocar el juego.
+ */
+export const POLAR_BASE_COST = 4;
+export const POLAR_COST_GROWTH = 1.5;
+export const POLAR_INCOME_BONUS = 0.04;
 
 // ---------------------------------------------------------------------------
 // Compradores del puerto (elección al vender — prestigio con decisión)

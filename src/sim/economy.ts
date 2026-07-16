@@ -16,6 +16,16 @@ export function lonjaMult(state: GameState): number {
   return 1 + state.lonjaLvl * C.LONJA_INCOME_BONUS;
 }
 
+/** La Estrella Polar: +% ingresos permanente por nivel (sumidero infinito de rep). */
+export function polarMult(state: GameState): number {
+  return 1 + state.polarLvl * C.POLAR_INCOME_BONUS;
+}
+
+/** Coste en reputación del siguiente nivel de la Estrella Polar (geométrico, sin techo). */
+export function polarCost(state: GameState): number {
+  return Math.ceil(C.POLAR_BASE_COST * Math.pow(C.POLAR_COST_GROWTH, state.polarLvl));
+}
+
 /** Bonus de racha de cobro manual (el primer cobro no bonifica). */
 export function comboMult(state: GameState): number {
   return 1 + Math.max(0, state.combo.n - 1) * C.COMBO_STEP;
@@ -170,7 +180,7 @@ export function cargoValue(state: GameState, boat: Boat): number {
   let v =
     def.baseCargo * (1 + C.CAP_BONUS * boat.capLvl) * zone.valueMult *
     prestigeMult(state) * speciesMult(state) * achievementMult(state) * lonjaMult(state) *
-    relicIncomeMult(state) * marketMult(state) * weather(state).cargoMult;
+    polarMult(state) * relicIncomeMult(state) * marketMult(state) * weather(state).cargoMult;
   if (boat.skipper?.trait === "redes") v *= 1 + C.TRAIT_CARGO_BONUS;
   v *= 1 + C.LEGACY_ASTILLERO_CARGO * state.legacy.astillero;
   return v;
