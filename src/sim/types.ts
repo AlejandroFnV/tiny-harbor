@@ -185,6 +185,8 @@ export interface GameState {
     bestCombo: number;
     goldenCatches: number;
     driftsTapped: number;
+    /** Ballenas ambientales tocadas (logro ballenero). */
+    whalesTapped: number;
     expeditionsDone: number;
     soldHigh: number;
     krakensRepelled: number;

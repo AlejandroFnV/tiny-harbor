@@ -138,6 +138,19 @@ export function capUpgradeCost(boat: Boat, state: GameState | null = null): numb
   return Math.ceil(def.baseCost * C.CAP_COST_FACTOR * Math.pow(C.COST_GROWTH, boat.capLvl) * upgradeDiscount(state));
 }
 
+/**
+ * Valor de reventa al desguazar un barco: fracción de lo invertido (base del tier
+ * + coste nominal de sus mejoras de velocidad/redes). Sobre la BASE, no sobre el
+ * precio escalado de compra, así que vender+recomprar nunca da beneficio.
+ */
+export function boatResaleValue(boat: Boat): number {
+  const base = C.BOAT_TIERS[boat.tier].baseCost;
+  let invested = base;
+  for (let l = 0; l < boat.speedLvl; l++) invested += base * C.SPEED_COST_FACTOR * Math.pow(C.COST_GROWTH, l);
+  for (let l = 0; l < boat.capLvl; l++) invested += base * C.CAP_COST_FACTOR * Math.pow(C.COST_GROWTH, l);
+  return Math.floor(invested * C.BOAT_RESALE_FRAC);
+}
+
 /** Duración total del ciclo de un barco (s): zona, velocidad, patrón y escuela. */
 export function cycleTime(state: GameState, boat: Boat): number {
   const def = C.BOAT_TIERS[boat.tier];

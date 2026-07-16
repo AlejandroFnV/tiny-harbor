@@ -669,7 +669,14 @@ body {
   color: var(--ink-soft);
   cursor: pointer;
   position: relative;
-  padding-top: 4px;
+  /* Centrar icono+label deja el texto arriba del borde inferior, con hueco para
+     el subrayado activo (antes el label se pegaba al fondo y el ::after lo tachaba). */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding-bottom: 8px;
   transition: color 0.15s ease;
 }
 
@@ -688,8 +695,8 @@ body {
   position: absolute;
   left: 22%;
   right: 22%;
-  bottom: 7px;
-  height: 4px;
+  bottom: 2px;
+  height: 3px;
   border-radius: 3px;
   background: var(--coral);
 }
@@ -798,13 +805,34 @@ body {
   padding: 6px 8px;
 }
 
+/* Vender/desguazar: acción secundaria discreta (la confirmación es la red). */
+.boat-row .sell-btn {
+  margin-left: auto;
+  align-self: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  min-height: 0;
+  min-width: 0;
+  color: var(--coral-dark);
+  background: transparent;
+  border: 1.5px solid var(--coral);
+}
+.boat-row .sell-btn .sub {
+  opacity: 0.75;
+  margin-left: 2px;
+}
+
 /* patrón al mando (chip en la fila del barco) */
 .skipper-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   margin-top: 6px;
-  padding: 2px 8px 2px 3px;
+  /* min-height 44: objetivo táctil (es un data-action, no decoración). */
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 4px 10px 4px 4px;
   font-size: 11.5px;
   font-weight: 700;
   color: var(--ink-soft);
@@ -1209,7 +1237,9 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 40;
+  /* Bajo la hoja (z30): un toast de logro/especie no debe tapar el contenido de
+     una pestaña abierta. El tip del tutorial (z45) sí va por encima a propósito. */
+  z-index: 29;
   width: min(340px, calc(100vw - 32px));
   pointer-events: none !important;
 }

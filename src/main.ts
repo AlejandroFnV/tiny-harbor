@@ -30,10 +30,12 @@ import {
   toggleManagerPause,
   renamePort,
   resolveStorm,
+  sellBoat,
   startExpedition,
   tapDrift,
   tapKraken,
   tapShoal,
+  tapWhale,
   tick,
   unlockZone,
   upgradeBoat,
@@ -206,6 +208,17 @@ const actions = {
     } else {
       audio.play("error");
     }
+    handleEvents(events);
+    ui.renderTab();
+  },
+  sellBoat(boatId: number) {
+    const events: SimEvent[] = [];
+    const r = sellBoat(state, boatId, events);
+    if (r.ok) {
+      audio.play("chest");
+      ui.toast(`Barco al desguace: +${formatMoney(r.gained!)}. Amarre libre.`);
+      persist();
+    } else audio.play("error");
     handleEvents(events);
     ui.renderTab();
   },
@@ -516,6 +529,17 @@ function canvasTap(x: number, y: number): void {
       const t = ui.coinTarget();
       renderer.particles.coins(hit.x, hit.y, t.x, t.y, 10);
     }
+  } else if (hit.type === "whale") {
+    const r = tapWhale(state, events);
+    if (r.ok) {
+      audio.play("chest");
+      renderer.claimWhale();
+      renderer.particles.float(hit.x, hit.y - 26, `+${formatMoney(r.gained!)}`, "#8fd0e8");
+      const t = ui.coinTarget();
+      renderer.particles.coins(hit.x, hit.y, t.x, t.y, 12);
+      tipOnce("whale", "¡La ballena! Cuando salga a superficie, tócala para un tesoro. Aparece de vez en cuando.");
+      persist();
+    }
   }
   handleEvents(events);
 }
@@ -714,6 +738,9 @@ if (new URLSearchParams(location.search).has("dev")) {
     save: persist,
     forceAmbient() {
       renderer.forceAmbient();
+    },
+    whaleDebug() {
+      return renderer.whaleDebug();
     },
     wipe() {
       clearStorage();

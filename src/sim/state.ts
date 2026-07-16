@@ -3,6 +3,7 @@
 import * as C from "./config";
 import type { Boat, GameState } from "./types";
 import { rollMissions } from "./missions";
+import { cargoValue } from "./economy";
 
 export function newBoat(state: GameState, tier: number): Boat {
   return {
@@ -65,11 +66,16 @@ export function newGame(now: number, seed = 1234567): GameState {
     tutorialStep: 0,
     tips: [],
     settings: { muted: false, music: true },
-    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
+    stats: { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, whalesTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 },
     rngSeed: seed >>> 0,
   };
-  // Empiezas con un bote heredado, ya faenando.
-  state.boats.push(newBoat(state, 0));
+  // Empiezas con un bote heredado que ACABA de volver cargado: gancho inmediato
+  // (antes salía "faenando" y había ~20s muertos sin nada que tocar antes de que
+  // la mano del tutorial apareciese — el peor momento para una pieza de portfolio).
+  const first = newBoat(state, 0);
+  first.phase = "ready";
+  first.cargo = cargoValue(state, first);
+  state.boats.push(first);
   rollMissions(state);
   return state;
 }
@@ -233,7 +239,7 @@ export function sanitize(state: GameState): GameState {
     state.order = null;
   }
   if (!state.stats || typeof state.stats !== "object") {
-    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 };
+    state.stats = { collects: 0, boatsBought: 0, upgrades: 0, taps: 0, ordersDone: 0, stormsRisked: 0, skippersHired: 0, bestCombo: 0, goldenCatches: 0, driftsTapped: 0, whalesTapped: 0, expeditionsDone: 0, soldHigh: 0, krakensRepelled: 0, specialSales: 0, weathersFished: 0, dailiesDone: 0, bestLifetime: 0, bestRepGain: 0, bestGiftStreak: 0 };
   }
   state.stats.collects = Math.floor(num(state.stats.collects, 0));
   state.stats.boatsBought = Math.floor(num(state.stats.boatsBought, 0));
@@ -245,6 +251,7 @@ export function sanitize(state: GameState): GameState {
   state.stats.bestCombo = Math.floor(num(state.stats.bestCombo, 0, 0, C.COMBO_MAX + C.RELIC_COMBO_EXTRA));
   state.stats.goldenCatches = Math.floor(num(state.stats.goldenCatches, 0));
   state.stats.driftsTapped = Math.floor(num(state.stats.driftsTapped, 0));
+  state.stats.whalesTapped = Math.floor(num(state.stats.whalesTapped, 0));
   state.stats.expeditionsDone = Math.floor(num(state.stats.expeditionsDone, 0));
   state.stats.soldHigh = Math.floor(num(state.stats.soldHigh, 0));
   state.stats.krakensRepelled = Math.floor(num(state.stats.krakensRepelled, 0));

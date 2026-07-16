@@ -22,6 +22,7 @@ import type { GameState } from "./types";
  * v8 → v9: el umbral de venta recuerda la última venta (anti re-sell).
  * v9 → v10: clima del día, desafío diario, pintura de barcos.
  * v10 → v11: pausa del gestor y consejos one-shot (tips).
+ * v11 → v12: ballena tappable (stats.whalesTapped).
  */
 const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
   1: (raw) => {
@@ -147,6 +148,13 @@ const MIGRATIONS: Record<number, (raw: Record<string, unknown>) => void> = {
     if (typeof raw.managerPaused !== "boolean") raw.managerPaused = false;
     if (!Array.isArray(raw.tips)) raw.tips = [];
     raw.version = 11;
+  },
+  11: (raw) => {
+    // v1.13: ballena tappable → nueva stat. (Vender barco no añade estado.)
+    const stats = (raw.stats ?? {}) as Record<string, unknown>;
+    if (typeof stats.whalesTapped !== "number") stats.whalesTapped = 0;
+    raw.stats = stats;
+    raw.version = 12;
   },
 };
 

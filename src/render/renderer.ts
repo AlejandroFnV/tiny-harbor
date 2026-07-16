@@ -53,7 +53,7 @@ interface Gull {
 }
 
 export interface HitResult {
-  type: "boat" | "shoal" | "drift" | "kraken";
+  type: "boat" | "shoal" | "drift" | "kraken" | "whale";
   boatId?: number;
   x: number;
   y: number;
@@ -88,6 +88,10 @@ export class Renderer {
   private driftPos = { x: 0, y: 0 };
   private krakenPos = { x: 0, y: 0 };
   private whale = { x: -30, dir: 1, active: false, timer: 40 };
+  // Posición en pantalla de la ballena y si es tappable (una vez por aparición).
+  private whalePos = { x: 0, y: 0 };
+  private whaleHittable = false;
+  private whaleGlint = 0;
   private lastTownKey = "";
   private lastTownCount = 0;
   private clientVisible = false;
@@ -119,6 +123,13 @@ export class Renderer {
   private lanternTimer = 70;
   // Pez ambiental que salta de vez en cuando (de día).
   private jumpTimer = 10;
+  // Degradados dithered (Bayer) cacheados por tamaño+hora: mar (profundidad) y cielo.
+  private seaCanvas = document.createElement("canvas");
+  private seaKey = "";
+  private skyCanvas = document.createElement("canvas");
+  private skyKey = "";
+  // Versiones sombreadas (forma/volumen dithered) de sprites, cacheadas.
+  private shadedCache = new Map<string, HTMLCanvasElement>();
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext("2d");
@@ -225,6 +236,12 @@ export class Renderer {
       const dy = pxY - this.driftPos.y;
       const r = 46;
       if (dx * dx + dy * dy < r * r) return { type: "drift", x: this.driftPos.x, y: this.driftPos.y };
+    }
+    if (this.whaleHittable) {
+      const dx = pxX - this.whalePos.x;
+      const dy = pxY - this.whalePos.y;
+      const r = 52; // generoso: la ballena es lejana y pequeña, target táctil cómodo
+      if (dx * dx + dy * dy < r * r) return { type: "whale", x: this.whalePos.x, y: this.whalePos.y };
     }
     for (const [id, r] of this.boatRects) {
       const dx = pxX - r.x;
@@ -377,20 +394,14 @@ export class Renderer {
     dt: number,
   ): void {
     const H = this.horizonY;
-    // 4 bandas discretas + fila de dithering entre bandas (cielo de gradiente pixel).
-    const bands = 4;
-    for (let i = 0; i < bands; i++) {
-      const c = mix(pal.skyHi, pal.skyLo, i / (bands - 1));
-      const y0 = Math.round((H * i) / bands);
-      const y1 = Math.round((H * (i + 1)) / bands);
-      g.fillStyle = c;
-      g.fillRect(0, y0, this.aw, y1 - y0);
-      if (i > 0) {
-        // dithering: damero de 1px con la banda anterior
-        g.fillStyle = mix(pal.skyHi, pal.skyLo, (i - 1) / (bands - 1));
-        for (let x = 0; x < this.aw; x += 2) g.fillRect(x + (y0 % 2), y0, 1, 1);
-      }
+    // Gradiente atmosférico dithered (Bayer), cacheado por tamaño+hora. La hora
+    // dorada, sol/luna y nubes van encima; el degradado base no anima solo.
+    const skyKey = `${this.aw}x${H}:${pal.skyHi}${pal.skyLo}`;
+    if (skyKey !== this.skyKey) {
+      this.buildSkyGradient(pal, this.aw, H);
+      this.skyKey = skyKey;
     }
+    g.drawImage(this.skyCanvas, 0, 0);
 
     // Hora dorada: en el paso día↔noche el horizonte se tiñe de coral/ámbar.
     // golden ∈ [0,1], pico en plena transición (amanecer y atardecer).
@@ -602,22 +613,15 @@ export class Renderer {
     const top = this.horizonY;
     const bottom = this.pierY;
     const H = bottom - top;
-    const ramp = [pal.seaFar, pal.sea1, pal.sea2, pal.sea3];
-    // Bandas con borde ondulante + dithering animado entre pasos.
-    for (let i = 0; i < ramp.length; i++) {
-      const y0 = top + Math.round((H * i) / ramp.length);
-      const y1 = i === ramp.length - 1 ? bottom : top + Math.round((H * (i + 1)) / ramp.length);
-      g.fillStyle = ramp[i];
-      g.fillRect(0, y0, this.aw, y1 - y0);
-      if (i > 0) {
-        // fila de damero desplazándose (marea)
-        const off = Math.floor(this.t * (i % 2 === 0 ? 3 : -3));
-        g.fillStyle = ramp[i - 1];
-        for (let x = 0; x < this.aw; x += 2) {
-          g.fillRect((((x + off) % this.aw) + this.aw) % this.aw, y0, 1, 1);
-        }
-      }
+    // Profundidad realista: degradado dithered (Bayer) de espuma-turquesa en el
+    // horizonte a azul abismal al fondo, en vez de 4 bandas planas. Cacheado por
+    // tamaño+hora (el gradiente no anima; la espuma/brillos sí van encima).
+    const key = `${this.aw}x${H}:${pal.seaFar}${pal.sea3}`;
+    if (key !== this.seaKey) {
+      this.buildSeaGradient(pal, this.aw, H);
+      this.seaKey = key;
     }
+    g.drawImage(this.seaCanvas, 0, top);
     // Línea de horizonte.
     g.fillStyle = pal.ink;
     g.globalAlpha = 0.35;
@@ -652,6 +656,101 @@ export class Renderer {
       }
     }
     g.globalAlpha = 1;
+  }
+
+  // Matriz Bayer 4×4 para dithering ordenado (degradado pixel-art sin banding).
+  private static BAYER4 = [
+    [0, 8, 2, 10],
+    [12, 4, 14, 6],
+    [3, 11, 1, 9],
+    [15, 7, 13, 5],
+  ];
+
+  /**
+   * Pinta un degradado vertical dithered (Bayer 4×4) entre N anclas de color en un
+   * canvas offscreen. `gamma` curva el perfil (>1 = el color final domina más abajo).
+   * Es el motor de realismo pixel-art: gradiente suave sin banda dura, coste O(w·h)
+   * pagado una sola vez (los llamadores cachean por tamaño+hora).
+   */
+  private static paintDitherGradient(
+    c: CanvasRenderingContext2D,
+    w: number,
+    h: number,
+    anchors: string[],
+    gamma: number,
+  ): void {
+    const seg = anchors.length - 1;
+    const B = Renderer.BAYER4;
+    for (let y = 0; y < h; y++) {
+      const t = h <= 1 ? 0 : Math.pow(y / (h - 1), gamma);
+      const f = t * seg;
+      const lo = Math.min(seg, Math.floor(f));
+      const hi = Math.min(seg, lo + 1);
+      const frac = f - lo;
+      const brow = B[y & 3];
+      for (let x = 0; x < w; x++) {
+        const thr = (brow[x & 3] + 0.5) / 16;
+        c.fillStyle = frac > thr ? anchors[hi] : anchors[lo];
+        c.fillRect(x, y, 1, 1);
+      }
+    }
+  }
+
+  /**
+   * Devuelve una versión SOMBREADA del sprite: forma/volumen mediante dithering
+   * ordenado que oscurece la base (oclusión) y el lado opuesto al sol. Da relieve
+   * pixel-art sin editar los mapas a mano. Cacheado por sprite+hora+lado de luz.
+   */
+  private shadedRaster(
+    spr: Sprite,
+    step: number,
+    sunLeft: boolean,
+    opts: { hullTier?: number; flip?: boolean; paint?: string } = {},
+  ): HTMLCanvasElement {
+    const key = `${spr.id}:${step}:${sunLeft ? 1 : 0}:${opts.hullTier ?? ""}:${opts.flip ? 1 : 0}:${opts.paint ?? ""}`;
+    const hit = this.shadedCache.get(key);
+    if (hit) return hit;
+    const b = raster(spr, step, opts);
+    const cv = document.createElement("canvas");
+    cv.width = b.width;
+    cv.height = b.height;
+    const c = cv.getContext("2d")!;
+    c.drawImage(b, 0, 0);
+    c.globalCompositeOperation = "source-atop"; // el sombreado solo cae en el sprite
+    const B = Renderer.BAYER4;
+    const w = cv.width, h = cv.height;
+    for (let y = 0; y < h; y++) {
+      const ao = h <= 1 ? 0 : y / (h - 1); // más oscuro hacia la base
+      for (let x = 0; x < w; x++) {
+        const side = w <= 1 ? 0 : sunLeft ? x / (w - 1) : 1 - x / (w - 1); // lado en sombra
+        const shade = ao * 0.6 + side * 0.4;
+        if (shade > (B[y & 3][x & 3] + 0.5) / 16) {
+          c.fillStyle = "rgba(24,32,48,0.30)";
+          c.fillRect(x, y, 1, 1);
+        }
+      }
+    }
+    c.globalCompositeOperation = "source-over";
+    this.shadedCache.set(key, cv);
+    if (this.shadedCache.size > 400) this.shadedCache.clear();
+    return cv;
+  }
+
+  /** Degradado de profundidad dithered del mar (horizonte claro → abismo). */
+  private buildSeaGradient(pal: PixelPalette, w: number, h: number): void {
+    this.seaCanvas.width = w;
+    this.seaCanvas.height = Math.max(1, h);
+    const anchors = [pal.seaFar, pal.sea1, pal.sea2, pal.sea3, mix(pal.sea3, pal.ink, 0.42)];
+    // Perfil no lineal: la luz cae más rápido cerca del fondo (más realista).
+    Renderer.paintDitherGradient(this.seaCanvas.getContext("2d")!, w, Math.max(1, h), anchors, 1.25);
+  }
+
+  /** Degradado atmosférico dithered del cielo (cenit → horizonte, con paso medio). */
+  private buildSkyGradient(pal: PixelPalette, w: number, h: number): void {
+    this.skyCanvas.width = w;
+    this.skyCanvas.height = Math.max(1, h);
+    const anchors = [pal.skyHi, mix(pal.skyHi, pal.skyLo, 0.55), pal.skyLo];
+    Renderer.paintDitherGradient(this.skyCanvas.getContext("2d")!, w, Math.max(1, h), anchors, 1.1);
   }
 
   // --- arcoíris: con llovizna y sol, un arco tenue corona el mar --------------------
@@ -885,7 +984,8 @@ export class Renderer {
       g.globalAlpha = 1;
     }
 
-    g.drawImage(img, x, y);
+    // Cuerpo con volumen (sombreado dithered); el reflejo de arriba usa el raster plano.
+    g.drawImage(this.shadedRaster(spr, step, this.lightX < 0.5, { hullTier: boat.tier, flip, paint }), x, y);
 
     // De noche: farol cálido sobre la cabina.
     if (night > 0.4) {
@@ -1195,28 +1295,59 @@ export class Renderer {
   private drawWhale(g: CanvasRenderingContext2D, dt: number, night: number): void {
     const w = this.whale;
     if (!w.active) {
+      this.whaleHittable = false;
       w.timer -= dt;
       if (w.timer <= 0) {
         w.active = true;
         w.dir = Math.random() < 0.5 ? 1 : -1;
         w.x = w.dir === 1 ? -WHALE.w : this.aw + WHALE.w;
+        this.whaleGlint = 0;
       }
       return;
     }
     w.x += w.dir * 3.2 * dt;
     if (w.x < -WHALE.w - 10 || w.x > this.aw + WHALE.w + 10) {
       w.active = false;
+      this.whaleHittable = false;
       w.timer = 90 + Math.random() * 120;
       return;
     }
     const y = this.horizonY + Math.round(this.seaH * 0.16 + Math.sin(this.t * 0.7) * 1.5);
-    g.globalAlpha = 0.5 - night * 0.2;
+    // Más presente que antes: ahora es tappable (tesoro), no solo sabor de fondo.
+    g.globalAlpha = 0.72 - night * 0.25;
     g.drawImage(raster(WHALE, NIGHT_STEPS), Math.round(w.x), y);
     g.globalAlpha = 1;
     // Chorro intermitente.
     if (Math.sin(this.t * 1.1) > 0.75) {
       this.particles.splash((w.x + WHALE.w * (w.dir === 1 ? 0.82 : 0.18)) * this.px, (y - 1) * this.px, 3);
     }
+    // Solo tappable cuando está de verdad dentro de pantalla (no en los bordes de
+    // entrada/salida, donde active=true pero el sprite aún no se ve).
+    const onScreen = w.x > -WHALE.w * 0.4 && w.x < this.aw - WHALE.w * 0.6;
+    this.whaleHittable = onScreen;
+    if (onScreen) {
+      // Objetivo de tap: centro del sprite en coordenadas de pantalla.
+      this.whalePos = { x: (w.x + WHALE.w / 2) * this.px, y: (y + WHALE.h / 2) * this.px };
+      // Guiño de luz sobre el lomo: pista de que se puede tocar.
+      this.whaleGlint += dt;
+      if (this.whaleGlint > 1.4) {
+        this.whaleGlint = 0;
+        this.particles.spark((w.x + WHALE.w * 0.5) * this.px, (y + 1) * this.px, 3, "#f2e8d5");
+      }
+    }
+  }
+
+  /** Dev/QA: estado tappable de la ballena para playtest headless (coords exactas). */
+  whaleDebug(): { hittable: boolean; x: number; y: number } {
+    return { hittable: this.whaleHittable, x: this.whalePos.x, y: this.whalePos.y };
+  }
+
+  /** El jugador tocó la ballena: se sumerge y no vuelve a ser tappable hasta la próxima. */
+  claimWhale(): void {
+    this.whale.active = false;
+    this.whaleHittable = false;
+    this.whale.timer = 90 + Math.random() * 120;
+    this.particles.splash(this.whalePos.x, this.whalePos.y, 14, "#bcd8cf");
   }
 
   // --- banco de peces -----------------------------------------------------------
@@ -1296,7 +1427,8 @@ export class Renderer {
     if (hasMarket) spots.push({ spr: MARKET, x: hasWarehouse ? mkX : whX + WAREHOUSE.w - MARKET.w });
     if (hasHouse2 && this.aw > 200) spots.push({ spr: HOUSE, x: Math.round(this.aw * 0.34) });
     if (hasHouse3 && this.aw > 260) spots.push({ spr: HOUSE, x: mkX - HOUSE.w - 8 });
-    for (const b of spots) g.drawImage(raster(b.spr, step), b.x, base - b.spr.h + 1);
+    const sunLeft = this.lightX < 0.5;
+    for (const b of spots) g.drawImage(this.shadedRaster(b.spr, step, sunLeft), b.x, base - b.spr.h + 1);
 
     // Obra nueva: destello la primera vez que aparece un edificio.
     const townKey = `${spots.length}:${state.prestiges}`;
@@ -1365,9 +1497,13 @@ export class Renderer {
       [7, 22, 0.62, 1.7], // lejana: alta, muy hazy
       [6, 13, 0.34, 0.4], // cercana: más baja, más sólida
     ];
+    const B = Renderer.BAYER4;
+    const rock = mix(pal.roof, pal.wood2, 0.4);
     for (const [amp, baseH, haze, phase] of ranges) {
-      const col = mix(mix(pal.roof, pal.wood2, 0.4), skyRef, haze - night * 0.15);
-      g.fillStyle = col;
+      // Volumen: la cima recibe más bruma (se funde con el cielo), la base es más
+      // sólida y oscura. Dithered entre las dos → relieve pixel-art sin banda dura.
+      const topCol = mix(rock, skyRef, Math.min(0.95, haze + 0.16 - night * 0.15));
+      const baseCol = mix(rock, skyRef, Math.max(0, haze - 0.12 - night * 0.15));
       for (let x = 0; x < this.aw; x++) {
         const u = x / this.aw;
         // Perfil de colinas: dos senos de distinta frecuencia + un pico suave.
@@ -1376,7 +1512,14 @@ export class Renderer {
           Math.sin(u * Math.PI * 3 + phase) * amp * 0.6 +
           Math.sin(u * Math.PI * 7 + phase * 2) * amp * 0.4;
         const top = Math.round(hy - h);
-        g.fillRect(x, top, 1, hy - top);
+        const span = Math.max(1, hy - top);
+        const brow = B[x & 3];
+        for (let y = top; y < hy; y++) {
+          const t = (y - top) / span; // 0 cima → 1 base
+          const thr = (brow[y & 3] + 0.5) / 16;
+          g.fillStyle = t > thr ? baseCol : topCol;
+          g.fillRect(x, y, 1, 1);
+        }
       }
     }
     // Una arista de luz de la hora dorada/día sobre la cima de la cadena cercana.

@@ -8,6 +8,7 @@ import {
   albaUnlocked,
   berths,
   boatCost,
+  boatResaleValue,
   buyerGain,
   canPrestige,
   capUpgradeCost,
@@ -421,6 +422,7 @@ const ACHIEVEMENT_CONDS: Record<string, (s: GameState) => boolean> = {
   dorado5: (s) => s.stats.goldenCatches >= 5,
   cofres10: (s) => s.stats.driftsTapped >= 10,
   cofres25: (s) => s.stats.driftsTapped >= 25,
+  ballenero: (s) => s.stats.whalesTapped >= 5,
   expedicion1: (s) => s.stats.expeditionsDone >= 1,
   expediciones5: (s) => s.stats.expeditionsDone >= 5,
   reliquias6: (s) => s.relics.length >= 6,
@@ -568,6 +570,34 @@ export function tapDrift(state: GameState, events: SimEvent[] = []): ActionResul
   if (drift.kind === 2 && nextRand(state) < C.DRIFT_GOLD_RELIC_CHANCE) grantRelic(state, events);
   events.push({ kind: "drift_reward", drift: drift.kind, amount: gained });
   return { ok: true, gained };
+}
+
+/**
+ * Tap a la ballena ambiental cuando sale a superficie: tesoro puntual (entre cofre
+ * de hierro y de oro). El renderer controla que solo se pueda una vez por aparición.
+ */
+export function tapWhale(state: GameState, events: SimEvent[] = []): ActionResult {
+  const gained = Math.max(C.WHALE_FLOOR, incomeRate(state) * C.WHALE_SECONDS);
+  gainMoney(state, gained, events);
+  state.stats.whalesTapped++;
+  return { ok: true, gained };
+}
+
+/**
+ * Desguaza un barco propio: libera el amarre y devuelve una fracción de lo invertido.
+ * No se puede vender el último barco, El Alba (único) ni un barco de expedición.
+ * El reembolso NO cuenta como ingreso (no infla lifetime/prestigio): es dinero de vuelta.
+ */
+export function sellBoat(state: GameState, boatId: number, _events: SimEvent[] = []): ActionResult {
+  if (state.boats.length <= 1) return { ok: false, reason: "last_boat" };
+  const boat = state.boats.find((b) => b.id === boatId);
+  if (!boat) return { ok: false, reason: "no_boat" };
+  if (boat.tier === C.ALBA_TIER) return { ok: false, reason: "alba" };
+  if (isAway(state, boatId)) return { ok: false, reason: "away" };
+  const refund = boatResaleValue(boat);
+  state.boats = state.boats.filter((b) => b.id !== boatId);
+  state.money += refund;
+  return { ok: true, gained: refund };
 }
 
 /** Zarpa la expedición `defIndex` con el barco más valioso (queda fuera hasta volver). */

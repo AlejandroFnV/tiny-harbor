@@ -20,6 +20,10 @@ describe("FSM del barco", () => {
   it("recorre zarpa → pesca → vuelve → listo con las proporciones del ciclo", () => {
     const s = newGame(0);
     const b = s.boats[0];
+    // El bote heredado ahora arranca "ready" (gancho a t=0); la FSM se prueba desde el zarpe.
+    b.phase = "out";
+    b.phaseT = 0;
+    b.cargo = 0;
     const total = cycleTime(s, b);
     tick(s, total * 0.2);
     expect(b.phase).toBe("out");

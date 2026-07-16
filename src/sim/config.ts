@@ -5,7 +5,7 @@
  * cumplen la curva diseñada; si cambias algo gordo, corre `npm test`.
  */
 
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 12;
 export const SAVE_KEY = "tiny-harbor-save";
 
 // ---------------------------------------------------------------------------
@@ -280,6 +280,18 @@ export const DRIFT_KINDS = [
 ] as const;
 /** Prob. de que un cofre de ORO traiga además una reliquia no poseída. */
 export const DRIFT_GOLD_RELIC_CHANCE = 0.25;
+
+/**
+ * Ballena tappable: cuando la ballena ambiental sale a superficie se puede tocar
+ * UNA vez por aparición para un tesoro (rara: aparece cada ~90-210s). La deja de
+ * decoración a enganche. Recompensa entre el cofre de hierro y el de oro.
+ */
+export const WHALE_SECONDS = 600;
+export const WHALE_FLOOR = 1500;
+
+/** Al desguazar/vender un barco propio se recupera esta fracción de lo invertido
+ *  (base del tier + mejoras pagadas). <1 y sobre la BASE → sin arbitraje de compra-venta. */
+export const BOAT_RESALE_FRAC = 0.5;
 
 // ---------------------------------------------------------------------------
 // Expediciones (mandas tu mejor barco fuera: botín gordo diferido)
@@ -665,6 +677,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { id: "dorado5", name: "Toque de Midas", desc: "Pesca 5 capturas doradas" },
   { id: "cofres10", name: "Ojos en el agua", desc: "Pesca 10 cofres a la deriva" },
   { id: "cofres25", name: "Rastreador de cofres", desc: "Pesca 25 cofres a la deriva" },
+  { id: "ballenero", name: "Canto de ballena", desc: "Toca la ballena 5 veces" },
   { id: "expedicion1", name: "Mar adentro", desc: "Completa tu primera expedición" },
   { id: "expediciones5", name: "Cartas de otro mar", desc: "Completa 5 expediciones" },
   { id: "reliquias6", name: "Vitrina del pecio", desc: "Reúne 6 reliquias" },

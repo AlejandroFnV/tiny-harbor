@@ -9,6 +9,7 @@ import {
   albaUnlocked,
   berths,
   boatCost,
+  boatResaleValue,
   buyerGain,
   canPrestige,
   capUpgradeCost,
@@ -41,6 +42,7 @@ import { boatThumbURL, skipperPortraitURL, speciesThumbURL } from "../render/spr
 
 export interface UIActions {
   buyBoat(tier: number): void;
+  sellBoat(boatId: number): void;
   upgradeBoat(boatId: number, what: "speed" | "cap"): void;
   upgradeDock(): void;
   upgradeLonja(): void;
@@ -231,6 +233,7 @@ export class UI {
     const id = Number(el.dataset.id ?? -1);
     switch (action) {
       case "buy-boat": this.act.buyBoat(Number(el.dataset.tier)); break;
+      case "sell-boat": this.confirmSellBoat(id); break;
       case "up-speed": this.act.upgradeBoat(id, "speed"); break;
       case "up-cap": this.act.upgradeBoat(id, "cap"); break;
       case "up-dock": this.act.upgradeDock(); break;
@@ -354,10 +357,12 @@ export class UI {
         ? `<span class="skipper-chip" data-action="trait-info" data-trait="${b.skipper.trait}" title="${tr?.desc ?? ""}"><img src="${skipperPortraitURL(b.skipper.name)}" alt="">${b.skipper.name} · ${tr?.name ?? ""}</span>`
         : "";
       const away = isAway(s, b.id);
+      const sellable = s.boats.length > 1 && b.tier !== C.ALBA_TIER && !away;
       html += `<div class="boat-row ${away ? "away" : ""}" data-boat="${b.id}">
         <div class="head">
           <span class="name">${t.name} <small>nº${b.id}</small></span>
           <span class="status" data-status>${away ? "de expedición" : ""}</span>
+          ${sellable ? `<button class="btn sell-btn" data-action="sell-boat" data-id="${b.id}" aria-label="Desguazar barco">Vender <span class="sub">${formatMoney(boatResaleValue(b))}</span></button>` : ""}
         </div>
         ${chip}
         <div class="ups">
@@ -1107,6 +1112,27 @@ export class UI {
     document.getElementById("gift-btn")!.addEventListener("click", () => {
       this.closeModal();
       onClaim();
+    }, { once: true });
+  }
+
+  private confirmSellBoat(boatId: number): void {
+    const s = this.getState();
+    const boat = s.boats.find((b) => b.id === boatId);
+    if (!boat) return;
+    const t = C.BOAT_TIERS[boat.tier];
+    const refund = boatResaleValue(boat);
+    const slot = document.getElementById("modal-slot")!;
+    slot.innerHTML = `<div class="modal-backdrop"><div class="modal">
+      <h2>¿Desguazar el ${t.name} nº${boat.id}?</h2>
+      <p>Liberas un amarre y recuperas <strong>+${formatMoney(refund)}</strong> (la mitad de lo invertido). El barco y sus mejoras no se recuperan.</p>
+      <div class="row">
+        <button class="btn" data-action="close-modal">Cancelar</button>
+        <button class="btn primary" id="sell-yes">Vender</button>
+      </div>
+    </div></div>`;
+    document.getElementById("sell-yes")!.addEventListener("click", () => {
+      this.closeModal();
+      this.act.sellBoat(boatId);
     }, { once: true });
   }
 
