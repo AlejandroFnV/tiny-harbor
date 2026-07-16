@@ -21,27 +21,44 @@ describe("prestigio", () => {
     expect(expected).toBeGreaterThanOrEqual(1);
   });
 
-  it("una vuelta profunda ya no rompe el juego: 50B de lifetime ≈ 100 rep, no 1000", () => {
+  it("con overshoot razonable el rep escala como cbrt: 50B a la altura del umbral ≈ 100 rep", () => {
     const s = newGame(0);
+    // prestiges=10 → umbral geométrico ≈ 2.36e10; 50B es ~×2.1 (overshoot normal).
+    s.prestiges = 10;
     s.lifetime = 50_000_000_000;
     const gain = prestigeGain(s);
     expect(gain).toBeGreaterThan(50);
     expect(gain).toBeLessThan(150); // con sqrt salían 1000 → mult ×121
   });
 
-  it("vender con overshoot sube el umbral por encima de lo vendido (anti re-sell)", () => {
-    // El caso reportado: umbral 400k, venta con 5M → el siguiente NO puede ser 1.2M.
+  it("overshoot capado: un lifetime absurdo en una venta temprana NO da rep desbocado", () => {
+    // El bug reportado: en late-run el dinero crece tan rápido que se vendía 100×+
+    // por encima del umbral y ese overshoot inflaba el rep → runaway. El rep se capa
+    // al umbral GEOMÉTRICO ×PRESTIGE_OVERSHOOT_REP_CAP: pasarse más no da más rep.
+    const absurdo = newGame(0); // umbral geométrico = 400k
+    absurdo.lifetime = 50_000_000_000; // overshoot ×125.000
+    const enElTecho = newGame(0);
+    enElTecho.lifetime = C.PRESTIGE_OVERSHOOT_REP_CAP * C.PRESTIGE_MIN_LIFETIME;
+    expect(prestigeGain(absurdo)).toBe(prestigeGain(enElTecho)); // pasarse del techo no suma
+    expect(prestigeGain(absurdo)).toBeLessThan(10); // nada de cientos de rep en la 1ª venta
+  });
+
+  it("overshoot: el umbral siguiente queda acotado y NO permite re-vender al instante", () => {
     const s = newGame(0);
-    s.lifetime = 5_000_000;
+    s.lifetime = 5_000_000; // overshoot ×12.5 sobre el umbral inicial (400k)
     doPrestige(s, 0);
+    // Reset de la vuelta → no se puede re-vender de inmediato (el mult apenas subió).
+    expect(canPrestige(s)).toBe(false);
     const next = prestigeThreshold(s);
-    expect(next).toBeCloseTo(5_000_000 * C.PRESTIGE_BEAT_FACTOR);
-    expect(next).toBeGreaterThan(C.PRESTIGE_MIN_LIFETIME * C.PRESTIGE_THRESHOLD_GROWTH);
+    const geom = C.PRESTIGE_MIN_LIFETIME * C.PRESTIGE_THRESHOLD_GROWTH;
+    // El ancla lastSale×1.4 se capa a geométrico×CAP → el overshoot no dispara el umbral.
+    expect(next).toBeLessThanOrEqual(geom * C.PRESTIGE_OVERSHOOT_REP_CAP + 1);
+    expect(next).toBeGreaterThan(geom); // pero algo por encima de la escalera base (ancla)
     // Y sin overshoot, manda la escalera geométrica de siempre.
     const t = newGame(0);
     t.lifetime = C.PRESTIGE_MIN_LIFETIME;
     doPrestige(t, 0);
-    expect(prestigeThreshold(t)).toBe(C.PRESTIGE_MIN_LIFETIME * C.PRESTIGE_THRESHOLD_GROWTH);
+    expect(prestigeThreshold(t)).toBe(geom);
   });
 
   it("el umbral de venta escala ×3 por puerto vendido", () => {
@@ -96,6 +113,25 @@ describe("prestigio", () => {
     doPrestige(s, 0);
     expect(s.reputation).toBeGreaterThan(rep1);
     expect(prestigeMult(s)).toBeCloseTo(1 + Math.pow(s.repEarned, C.PRESTIGE_MULT_CURVE) * C.PRESTIGE_MULT_PER_REP);
+  });
+
+  it("REGRESIÓN runaway: vender con overshoot enorme NO acelera las vueltas siguientes", () => {
+    // Bug reportado por Alejandro: al vender muy por encima del umbral, la siguiente
+    // ronda ganaba una barbaridad en nada de tiempo. Simulamos 5 ventas seguidas
+    // vendiendo SIEMPRE ×25 por encima del umbral y comprobamos que el mult
+    // permanente queda en el mismo orden que vendiendo justo en el umbral.
+    function multTras5Ventas(overshoot: number): number {
+      const s = newGame(0);
+      for (let p = 0; p < 5; p++) {
+        s.lifetime = prestigeThreshold(s) * overshoot;
+        doPrestige(s, p * 1000);
+      }
+      return prestigeMult(s);
+    }
+    const justo = multTras5Ventas(1);
+    const desbocado = multTras5Ventas(25);
+    // Con el bug (rep ∝ overshoot absoluto) esto era ~×20 mayor. Ahora, acotado.
+    expect(desbocado).toBeLessThan(justo * 1.5);
   });
 
   it("prestigiar resetea lonja y racha", () => {

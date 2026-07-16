@@ -299,10 +299,14 @@ export function buyerGain(state: GameState, buyerId: string): number {
  * encima de lo que ganaste en la vuelta que vendiste (nada de re-vender en 2 min).
  */
 export function prestigeThreshold(state: GameState): number {
-  return Math.max(
-    C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, state.prestiges),
-    state.lastSaleLifetime * C.PRESTIGE_BEAT_FACTOR,
-  );
+  const geom = C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, state.prestiges);
+  // El ancla (superar lo último vendido) evita re-vender al instante tras un
+  // overshoot, pero se capa a ×PRESTIGE_OVERSHOOT_REP_CAP del umbral geométrico:
+  // sin ese techo, un overshoot enorme disparaba el umbral y la siguiente ronda se
+  // hacía eterna (efecto secundario de capar el rep). Con el techo, el peor caso es
+  // una ronda ~3× el umbral limpio, alcanzable con el mult que ya tienes.
+  const anchor = Math.min(state.lastSaleLifetime * C.PRESTIGE_BEAT_FACTOR, geom * C.PRESTIGE_OVERSHOOT_REP_CAP);
+  return Math.max(geom, anchor);
 }
 
 export function canPrestige(state: GameState): boolean {
@@ -311,7 +315,18 @@ export function canPrestige(state: GameState): boolean {
 
 export function prestigeGain(state: GameState): number {
   if (!canPrestige(state)) return 0;
-  return Math.floor(Math.cbrt(state.lifetime / C.PRESTIGE_REP_DIVISOR));
+  // El rep se calcula sobre el lifetime CON TECHO a un múltiplo del umbral GEOMÉTRICO
+  // limpio (400k×3^ventas, que depende solo del nº de ventas, NO del overshoot).
+  // Batir esa barra hasta ×PRESTIGE_OVERSHOOT_REP_CAP premia (cbrt); pasarse más no
+  // da rep extra. Se capa por el geométrico y NO por prestigeThreshold() a propósito:
+  // el ancla lastSale×1.4 de prestigeThreshold se infla con el propio overshoot, así
+  // que caparse por ella dejaba pasar el runaway por ese canal. Sin este techo, en
+  // late-run el dinero crece tan rápido que vendías 100× por encima del umbral →
+  // cbrt(100)=4.6× más rep → mult desbocado → la siguiente ronda ganaba una
+  // barbaridad en nada de tiempo (runaway reportado por Alejandro).
+  const geomThreshold = C.PRESTIGE_MIN_LIFETIME * Math.pow(C.PRESTIGE_THRESHOLD_GROWTH, state.prestiges);
+  const capped = Math.min(state.lifetime, C.PRESTIGE_OVERSHOOT_REP_CAP * geomThreshold);
+  return Math.floor(Math.cbrt(capped / C.PRESTIGE_REP_DIVISOR));
 }
 
 // --- Offline ---------------------------------------------------------------------

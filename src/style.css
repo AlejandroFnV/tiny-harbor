@@ -305,6 +305,10 @@ body {
 .market-chip.down { color: #b04a35; }
 .market-chip.hot { color: #b07d18; animation: combo-pulse 0.9s ease-in-out infinite; display: inline-block; }
 
+/* Chips del HUD (mercado/clima/vigía): tap = explicación (móvil no tiene hover). */
+.market-chip, .weather-chip, .vigia-chip { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.market-chip:active, .weather-chip:active, .vigia-chip:active { opacity: 0.55; }
+
 /* Barco fuera de expedición: fila atenuada. */
 .boat-row.away { opacity: 0.6; }
 

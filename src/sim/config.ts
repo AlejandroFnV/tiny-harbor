@@ -166,6 +166,13 @@ export const PRESTIGE_REP_DIVISOR = 50_000;
  */
 export const PRESTIGE_MULT_PER_REP = 0.12;
 export const PRESTIGE_MULT_CURVE = 0.75;
+/**
+ * Techo del overshoot para la reputación: el rep de una venta se calcula sobre
+ * min(lifetime, THIS × umbral). Batir el umbral hasta ×3 da rep extra (cbrt);
+ * pasarse más NO. Corta el runaway: en late-run el dinero crece tan rápido que se
+ * vendía 100× por encima del umbral y cbrt(100) inflaba el mult sin control.
+ */
+export const PRESTIGE_OVERSHOOT_REP_CAP = 3;
 
 // ---------------------------------------------------------------------------
 // La Lonja (ampliaciones infinitas — sumidero de dinero del late game)

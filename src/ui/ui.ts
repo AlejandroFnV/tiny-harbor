@@ -127,9 +127,9 @@ export class UI {
         <div class="money-card" id="money-card">
           <div class="amount"><span id="money">0</span></div>
           <div class="rate" id="rate">0/s</div>
-          <div class="market-chip" id="market-chip" title="Precio de la lonja: sube y baja solo. Cobra caro."><span id="market-arrow">→</span> lonja <b id="market-val">×1.00</b></div>
-          <div class="vigia-chip" id="vigia-chip" hidden title="La Torre del Vigía otea el horizonte"></div>
-          <div class="weather-chip" id="weather-chip" hidden></div>
+          <div class="market-chip" id="market-chip" data-action="chip-info" data-chip="market" title="Precio de la lonja: sube y baja solo. Cobra caro."><span id="market-arrow">→</span> lonja <b id="market-val">×1.00</b></div>
+          <div class="vigia-chip" id="vigia-chip" hidden data-action="chip-info" data-chip="vigia" title="La Torre del Vigía otea el horizonte"></div>
+          <div class="weather-chip" id="weather-chip" hidden data-action="chip-info" data-chip="weather"></div>
         </div>
         <div class="top-actions">
           <div class="combo-stamp" id="combo-stamp" hidden><span id="combo-val">×1.0</span><small>RACHA</small></div>
@@ -250,6 +250,22 @@ export class UI {
         // Móvil no tiene hover: el rasgo del patrón se explica al toque.
         const tr = traitDef(el.dataset.trait ?? "");
         if (tr) this.toast(`${tr.name}: ${tr.desc}.`);
+        break;
+      }
+      case "chip-info": {
+        // Móvil no tiene hover: los chips del HUD (mercado/clima/vigía) se explican al toque.
+        const s = this.getState();
+        const chip = el.dataset.chip;
+        if (chip === "market") {
+          const dir = s.market.dir > 0 ? "subiendo" : s.market.dir < 0 ? "bajando" : "estable";
+          const hot = s.market.mult >= C.MARKET_HIGH ? " ¡Buen momento para cobrar!" : "";
+          this.toast(`Lonja ×${s.market.mult.toFixed(2)} (${dir}): el precio sube y baja solo. Cobra con el precio alto y ganas más.${hot}`);
+        } else if (chip === "weather") {
+          const w = C.WEATHERS[Math.min(s.weather, C.WEATHERS.length - 1)];
+          this.toast(`${w.name}: ${w.desc}.`);
+        } else if (chip === "vigia") {
+          this.toast("La Torre del Vigía otea el horizonte: te dice cuánto falta para el próximo evento y para el siguiente cofre a la deriva.");
+        }
         break;
       }
       case "buy-legacy": this.act.buyLegacy(el.dataset.branch as C.LegacyBranch); break;
